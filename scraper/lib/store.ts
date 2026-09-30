@@ -35,10 +35,18 @@ export function normalize(r: RawListing): NewListing | null {
     floor: r.floor ?? null,
     price,
     images: (r.images ?? []).slice(0, 8),
+    ...coords(r.lat, r.lng),
     isAgency: r.isAgency ?? null,
     postedAt: r.postedAt && !isNaN(r.postedAt.getTime()) ? r.postedAt : null,
     fingerprint: r.fingerprint ?? fingerprint(city.key, street, rooms, r.sqm ?? null),
   };
+}
+
+/** Keep coordinates only when they fall inside Israel's bounding box. */
+function coords(lat: number | null | undefined, lng: number | null | undefined) {
+  if (lat == null || lng == null || !Number.isFinite(lat) || !Number.isFinite(lng)) return {};
+  if (lat < 29 || lat > 33.5 || lng < 34 || lng > 36) return {};
+  return { lat, lng };
 }
 
 /**
@@ -106,6 +114,8 @@ export async function saveListings(db: Db, batch: NewListing[]) {
           url: item.url,
           images: item.images?.length ? item.images : prev.images,
           sqm: item.sqm ?? prev.sqm,
+          lat: item.lat ?? prev.lat,
+          lng: item.lng ?? prev.lng,
           ...(priceChanged && {
             price: item.price,
             priceHistory: [...prev.priceHistory, { price: item.price!, at: now.toISOString() }],

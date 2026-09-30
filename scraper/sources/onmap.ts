@@ -12,7 +12,10 @@ interface OnmapItem {
   currency?: string;
   property_type?: string;
   created_at?: string;
-  address?: { he?: { city_name?: string; neighborhood?: string; street_name?: string; house_number?: string | number | null } };
+  address?: {
+    he?: { city_name?: string; neighborhood?: string; street_name?: string; house_number?: string | number | null };
+    location?: { lat?: number; lon?: number };
+  };
   additional_info?: { rooms?: number | null; area?: { base?: number | null }; floor?: { on_the?: number | null } };
   images?: { gallery?: string; full?: string }[];
   thumbnail?: string;
@@ -80,6 +83,8 @@ export const onmap: Source = {
               sqm: i.additional_info?.area?.base ?? null,
               floor: i.additional_info?.floor?.on_the ?? null,
               price: i.price ?? null,
+              lat: i.address?.location?.lat ?? null,
+              lng: i.address?.location?.lon ?? null,
               images: (i.images ?? []).map((im) => im.gallery ?? im.full).filter((x): x is string => !!x),
               postedAt: i.created_at ? new Date(i.created_at) : null,
               title: [type, street].filter(Boolean).join(" · ") || null,

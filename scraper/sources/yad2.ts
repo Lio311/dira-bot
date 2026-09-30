@@ -17,6 +17,7 @@ interface Yad2Item {
     neighborhood?: { text?: string };
     street?: { text?: string };
     house?: { number?: number; floor?: number };
+    coords?: { lat?: number; lon?: number };
   };
   additionalDetails?: { property?: { text?: string }; roomsCount?: number; squareMeter?: number };
   metaData?: { coverImage?: string; images?: string[]; squareMeterBuild?: number };
@@ -49,6 +50,8 @@ function toListing(i: Yad2Item): RawListing | null {
     sqm: i.additionalDetails?.squareMeter ?? i.metaData?.squareMeterBuild ?? null,
     floor: i.address.house?.floor ?? null,
     price: i.price ?? null,
+    lat: i.address.coords?.lat ?? null,
+    lng: i.address.coords?.lon ?? null,
     images: i.metaData?.images?.length ? i.metaData.images : i.metaData?.coverImage ? [i.metaData.coverImage] : [],
     isAgency: i.adType ? i.adType !== "private" : null,
     title: [i.additionalDetails?.property?.text, street].filter(Boolean).join(" · ") || null,
@@ -71,6 +74,8 @@ interface ApifyYad2Item {
   areaSqm?: number;
   coverImage?: string;
   publishedAt?: string;
+  latitude?: number;
+  longitude?: number;
 }
 
 // When Radware challenges us, fall back to a managed Apify actor (paid per listing).
@@ -100,6 +105,8 @@ async function viaApify(): Promise<RawListing[]> {
       floor: i.floor != null && /^\d+$/.test(String(i.floor)) ? Number(i.floor) : null,
       price: i.price ?? null,
       images: i.coverImage ? [i.coverImage] : [],
+      lat: i.latitude ?? null,
+      lng: i.longitude ?? null,
       isAgency: i.hasAgent ?? (i.adType ? i.adType !== "private" : null),
       postedAt: i.publishedAt ? new Date(i.publishedAt) : null,
       title: i.address ?? null,

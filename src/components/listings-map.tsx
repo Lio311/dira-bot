@@ -1,0 +1,491 @@
+"use client";
+
+import "maplibre-gl/dist/maplibre-gl.css";
+import "./listings-map.css";
+
+import {
+  getRTLTextPluginStatus,
+  getVersion,
+  LngLatBounds,
+  Map as MapLibreMap,
+  Marker,
+  NavigationControl,
+  Popup,
+  setRTLTextPlugin,
+  setWorkerUrl,
+} from "maplibre-gl";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { CITY_BY_KEY, SOURCES, type CityKey, type SourceKey } from "@/lib/config";
+import type { ListingView } from "@/lib/data";
+import { ils, ilsShort } from "@/lib/format";
+
+export interface ListingsMapProps {
+  listings: ListingView[]; // the currently filtered listings (some have lat/lng null)
+  hoveredId: number | null; // card hovered in the list → highlight its marker
+  selectedId: number | null; // selected listing → open its popup + highlight
+  onHover: (id: number | null) => void;
+  onSelect: (id: number | null) => void;
+}
+
+const STYLES = {
+  light: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
+  dark: "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
+} as const;
+
+// CARTO styles switch to local (Hebrew) names at street zoom; without the
+// RTL plugin those labels render with reversed letters.
+const RTL_PLUGIN_URL = "https://unpkg.com/@mapbox/mapbox-gl-rtl-text@0.3.0/dist/mapbox-gl-rtl-text.js";
+
+const INITIAL_CENTER: [number, number] = [34.82, 32.1];
+const INITIAL_ZOOM = 10.3;
+const FIT_MAX_ZOOM = 14;
+const FIT_PADDING = 48;
+
+/* ------------------------------------------------------------------ */
+/* Worker                                                              */
+/* ------------------------------------------------------------------ */
+
+// MapLibre v6 ships its worker as an ES module (maplibre-gl-worker.mjs) that
+// imports "./maplibre-gl-shared.mjs", and finds it via import.meta.url. Under
+// Turbopack that resolves to nothing and the worker loads the page's HTML.
+// Instead: emit both files as static assets, point the worker's relative
+// import at the hashed shared asset, and hand MapLibre a same-origin blob URL.
+const SHARED_IMPORT = "./maplibre-gl-shared.mjs";
+let workerReady: Promise<void> | null = null;
+
+function prepareWorker(): Promise<void> {
+  workerReady ??= (async () => {
+    const abs = (u: URL) => new URL(u.href, window.location.href).href;
+    const workerAsset = abs(new URL("maplibre-gl/dist/maplibre-gl-worker.mjs", import.meta.url));
+    const sharedAsset = abs(new URL("maplibre-gl/dist/maplibre-gl-shared.mjs", import.meta.url));
+    const res = await fetch(workerAsset);
+    if (!res.ok) throw new Error(`worker asset: HTTP ${res.status}`);
+    const source = await res.text();
+    if (!source.includes(SHARED_IMPORT)) throw new Error("worker asset: shared import not found");
+    const patched = source.replaceAll(SHARED_IMPORT, sharedAsset);
+    setWorkerUrl(URL.createObjectURL(new Blob([patched], { type: "text/javascript" })));
+  })().catch((err) => {
+    // Same files from a CDN, pinned to the bundled version.
+    console.warn("[listings-map] self-hosted MapLibre worker unavailable, using CDN", err);
+    setWorkerUrl(`https://cdn.jsdelivr.net/npm/maplibre-gl@${getVersion()}/dist/maplibre-gl-worker.mjs`);
+  });
+  return workerReady;
+}
+
+/* ------------------------------------------------------------------ */
+/* Color scheme                                                        */
+/* ------------------------------------------------------------------ */
+
+const DARK_QUERY = "(prefers-color-scheme: dark)";
+
+function subscribeScheme(onChange: () => void) {
+  const mql = window.matchMedia(DARK_QUERY);
+  mql.addEventListener("change", onChange);
+  return () => mql.removeEventListener("change", onChange);
+}
+const isDark = () => window.matchMedia(DARK_QUERY).matches;
+const isDarkOnServer = () => false;
+
+const styleFor = (dark: boolean) => (dark ? STYLES.dark : STYLES.light);
+
+/* ------------------------------------------------------------------ */
+/* Listing helpers                                                     */
+/* ------------------------------------------------------------------ */
+
+type Located = ListingView & { lat: number; lng: number };
+
+const hasCoords = (l: ListingView): l is Located =>
+  l.lat != null && l.lng != null && Number.isFinite(l.lat) && Number.isFinite(l.lng);
+
+const priorityOf = (p: number) => (p >= 1 && p <= 4 ? Math.round(p) : 4);
+
+const sourceName = (s: string) => SOURCES[s as SourceKey]?.name ?? s;
+
+function factsOf(l: ListingView): string[] {
+  return [
+    l.rooms != null ? `${l.rooms} rooms` : null,
+    l.sqm ? `${l.sqm} m²` : null,
+    l.floor != null ? (l.floor === 0 ? "ground floor" : `floor ${l.floor}`) : null,
+  ].filter((x): x is string => x != null);
+}
+
+function placeOf(l: ListingView): string {
+  return (
+    [l.street, l.neighborhood].filter(Boolean).join(", ") ||
+    l.title ||
+    CITY_BY_KEY[l.city as CityKey]?.name ||
+    ""
+  );
+}
+
+/** Scraped URLs go straight into DOM attributes; only allow http(s). */
+function safeHttpUrl(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  try {
+    const u = new URL(raw, window.location.href);
+    return u.protocol === "https:" || u.protocol === "http:" ? u.href : null;
+  } catch {
+    return null;
+  }
+}
+
+function h<K extends keyof HTMLElementTagNameMap>(tag: K, className?: string, text?: string) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text != null) node.textContent = text;
+  return node;
+}
+
+/* ------------------------------------------------------------------ */
+/* Markers                                                             */
+/* ------------------------------------------------------------------ */
+
+interface MarkerEntry {
+  marker: Marker;
+  /** Outer element owned by MapLibre (it writes `transform` on it). */
+  el: HTMLDivElement;
+  /** Inner pill: safe to scale/transition. */
+  pill: HTMLButtonElement;
+  price: HTMLSpanElement;
+  /** Signature of the fields the marker renders, to detect in-place updates. */
+  sig: string;
+}
+
+const markerSig = (l: Located) => `${l.lat},${l.lng},${l.price},${l.priority}`;
+
+function paintMarker(entry: MarkerEntry, l: Located) {
+  const p = priorityOf(l.priority);
+  entry.el.dataset.p = String(p);
+  entry.pill.style.setProperty("--lm-dot", `var(--p${p})`);
+  entry.price.textContent = ilsShort(l.price);
+  const facts = factsOf(l);
+  const place = placeOf(l);
+  entry.pill.setAttribute("aria-label", [ils(l.price), ...facts, place].filter(Boolean).join(", "));
+  entry.sig = markerSig(l);
+}
+
+function setMarkerActive(entry: MarkerEntry | undefined, active: boolean, selected: boolean) {
+  if (!entry) return;
+  entry.el.classList.toggle("is-active", active);
+  entry.el.classList.toggle("is-selected", active && selected);
+  entry.pill.classList.toggle("is-active", active);
+  entry.pill.setAttribute("aria-pressed", String(active && selected));
+}
+
+/* ------------------------------------------------------------------ */
+/* Popup                                                               */
+/* ------------------------------------------------------------------ */
+
+// Built with DOM APIs only: every string here is scraped third-party text.
+function buildPopupContent(l: Located): HTMLElement {
+  const card = h("div", "lm-card");
+  const href = safeHttpUrl(l.url);
+  const image = safeHttpUrl(l.image);
+
+  if (image) {
+    const media = href ? h("a", "lm-card-media") : h("div", "lm-card-media");
+    if (media instanceof HTMLAnchorElement && href) {
+      media.href = href;
+      media.target = "_blank";
+      media.rel = "noopener noreferrer";
+      media.tabIndex = -1;
+      media.setAttribute("aria-hidden", "true");
+    }
+    const img = h("img");
+    img.alt = "";
+    img.decoding = "async";
+    img.draggable = false;
+    img.referrerPolicy = "no-referrer";
+    img.addEventListener("error", () => media.remove(), { once: true });
+    img.src = image;
+    media.append(img);
+    card.append(media);
+  }
+
+  const body = h("div", "lm-card-body");
+
+  const priceRow = h("div", "lm-card-price-row");
+  priceRow.append(h("span", "lm-card-price", ils(l.price)));
+  if (l.price && l.sqm) priceRow.append(h("span", "lm-card-per-sqm", `${ilsShort(Math.round(l.price / l.sqm))}/m²`));
+  body.append(priceRow);
+
+  const facts = factsOf(l);
+  if (facts.length) body.append(h("div", "lm-card-facts", facts.join(" · ")));
+
+  const place = placeOf(l);
+  if (place) {
+    const line = h("div", "lm-card-place", place);
+    line.dir = "auto";
+    line.title = place;
+    body.append(line);
+  }
+
+  const foot = h("div", "lm-card-foot");
+  const source = h("span", "lm-card-source");
+  const dot = h("span", "lm-card-dot");
+  dot.style.setProperty("--lm-dot", `var(--p${priorityOf(l.priority)})`);
+  source.append(dot, document.createTextNode(sourceName(l.source)));
+  foot.append(source);
+  if (href) {
+    const link = h("a", "lm-card-link", "Open listing ↗");
+    link.href = href;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    foot.append(link);
+  }
+  body.append(foot);
+
+  card.append(body);
+  return card;
+}
+
+interface OpenPopup {
+  id: number;
+  popup: Popup;
+  onClose: () => void;
+}
+
+/** Remove a popup without reporting it as a user dismissal. */
+function closeSilently(open: OpenPopup | null) {
+  if (!open) return;
+  open.popup.off("close", open.onClose);
+  open.popup.remove();
+}
+
+/* ------------------------------------------------------------------ */
+/* Component                                                           */
+/* ------------------------------------------------------------------ */
+
+export default function ListingsMap({ listings, hoveredId, selectedId, onHover, onSelect }: ListingsMapProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  // Created asynchronously (after the worker is prepared), hence state.
+  const [map, setMap] = useState<MapLibreMap | null>(null);
+  const styleRef = useRef<string | null>(null);
+  const markersRef = useRef(new Map<number, MarkerEntry>());
+  const activeRef = useRef(new Set<number>());
+  const popupRef = useRef<OpenPopup | null>(null);
+  const fitKeyRef = useRef<string | null>(null);
+  const hasFitRef = useRef(false);
+
+  // Marker/map listeners are attached once; read callbacks through refs so they never go stale.
+  const onHoverRef = useRef(onHover);
+  const onSelectRef = useRef(onSelect);
+  useLayoutEffect(() => {
+    onHoverRef.current = onHover;
+    onSelectRef.current = onSelect;
+  });
+
+  const dark = useSyncExternalStore(subscribeScheme, isDark, isDarkOnServer);
+
+  const located = useMemo(() => listings.filter(hasCoords), [listings]);
+  // Sorted so reordering the list (sorting) doesn't count as a new set.
+  const idsKey = useMemo(
+    () => located.map((l) => l.id).sort((a, b) => a - b).join(","),
+    [located],
+  );
+
+  // Create the map once.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    let cancelled = false;
+    let instance: MapLibreMap | null = null;
+
+    if (getRTLTextPluginStatus() === "unavailable") {
+      setRTLTextPlugin(RTL_PLUGIN_URL, true).catch(() => {});
+    }
+
+    prepareWorker().then(() => {
+      if (cancelled) return;
+      const style = styleFor(isDark());
+      const m = new MapLibreMap({
+        container,
+        style,
+        center: INITIAL_CENTER,
+        zoom: INITIAL_ZOOM,
+        attributionControl: { compact: true },
+        // On touch devices one finger scrolls the page; two fingers move the map.
+        cooperativeGestures: window.matchMedia("(pointer: coarse)").matches,
+        // No compass, so no way back from a rotated/pitched view: keep it flat and north-up.
+        dragRotate: false,
+        pitchWithRotate: false,
+        touchPitch: false,
+        maxPitch: 0,
+      });
+      m.touchZoomRotate.disableRotation();
+      m.keyboard.disableRotation();
+      m.addControl(new NavigationControl({ showCompass: false }), "top-right");
+
+      // Clicking empty map clears the selection. With a popup open, its own
+      // close handler reports that instead (this listener runs first).
+      m.on("click", () => {
+        if (!popupRef.current) onSelectRef.current(null);
+      });
+
+      instance = m;
+      styleRef.current = style;
+      setMap(m);
+    });
+
+    const markers = markersRef.current;
+    const active = activeRef.current;
+    return () => {
+      cancelled = true;
+      if (!instance) return;
+      closeSilently(popupRef.current);
+      popupRef.current = null;
+      markers.clear();
+      active.clear();
+      fitKeyRef.current = null;
+      hasFitRef.current = false;
+      instance.remove();
+      setMap(null);
+    };
+  }, []);
+
+  // Follow the OS color scheme. HTML markers and the popup survive setStyle.
+  useEffect(() => {
+    const style = styleFor(dark);
+    if (!map || styleRef.current === style) return;
+    styleRef.current = style;
+    map.setStyle(style);
+  }, [map, dark]);
+
+  // Diff markers against the located listings.
+  useEffect(() => {
+    if (!map) return;
+    const markers = markersRef.current;
+    const next = new Set(located.map((l) => l.id));
+
+    for (const [id, entry] of markers) {
+      if (!next.has(id)) {
+        entry.marker.remove();
+        markers.delete(id);
+      }
+    }
+
+    for (const l of located) {
+      const existing = markers.get(l.id);
+      if (existing) {
+        if (existing.sig !== markerSig(l)) {
+          existing.marker.setLngLat([l.lng, l.lat]);
+          paintMarker(existing, l);
+        }
+        continue;
+      }
+
+      const id = l.id;
+      const el = h("div", "lm-marker");
+      const pill = h("button", "lm-pill");
+      pill.type = "button";
+      const price = h("span", "lm-pill-price");
+      pill.append(h("span", "lm-pill-dot"), price);
+      el.append(pill);
+
+      pill.addEventListener("pointerenter", (e) => {
+        if (e.pointerType !== "touch") onHoverRef.current(id);
+      });
+      pill.addEventListener("pointerleave", (e) => {
+        if (e.pointerType !== "touch") onHoverRef.current(null);
+      });
+      pill.addEventListener("click", (e) => {
+        e.stopPropagation(); // keep the map's click (deselect) from firing
+        onSelectRef.current(id);
+      });
+      pill.addEventListener("dblclick", (e) => e.stopPropagation());
+
+      const marker = new Marker({ element: el, anchor: "center" }).setLngLat([l.lng, l.lat]).addTo(map);
+      const entry: MarkerEntry = { marker, el, pill, price, sig: "" };
+      paintMarker(entry, l);
+      markers.set(id, entry);
+    }
+  }, [map, located]);
+
+  // Highlight hovered + selected markers (re-applied after the marker diff).
+  useEffect(() => {
+    const markers = markersRef.current;
+    const next = new Set<number>();
+    if (hoveredId != null) next.add(hoveredId);
+    if (selectedId != null) next.add(selectedId);
+    for (const id of activeRef.current) {
+      if (!next.has(id)) setMarkerActive(markers.get(id), false, false);
+    }
+    for (const id of next) setMarkerActive(markers.get(id), true, id === selectedId);
+    activeRef.current = next;
+  }, [map, hoveredId, selectedId, located]);
+
+  // Fit to the listings whenever the set of located ids changes.
+  useEffect(() => {
+    if (!map || fitKeyRef.current === idsKey) return;
+    fitKeyRef.current = idsKey;
+    if (!located.length) return;
+
+    const bounds = new LngLatBounds();
+    for (const l of located) bounds.extend([l.lng, l.lat]);
+    const { clientWidth: w, clientHeight: hgt } = map.getContainer();
+    // Small containers can't afford the full padding (MapLibre warns and bails).
+    const padding = Math.max(8, Math.min(FIT_PADDING, Math.floor(Math.min(w, hgt) / 5)));
+    map.fitBounds(bounds, {
+      padding,
+      maxZoom: FIT_MAX_ZOOM,
+      ...(hasFitRef.current ? { duration: 600 } : { animate: false }),
+    });
+    hasFitRef.current = true;
+  }, [map, idsKey, located]);
+
+  // Popup for the selected listing.
+  useEffect(() => {
+    if (!map) return;
+    const listing = selectedId != null ? located.find((l) => l.id === selectedId) : undefined;
+    if (popupRef.current && popupRef.current.id === listing?.id) return;
+
+    closeSilently(popupRef.current);
+    popupRef.current = null;
+    if (!listing) return;
+
+    const lngLat: [number, number] = [listing.lng, listing.lat];
+    const popup = new Popup({
+      closeButton: false,
+      closeOnClick: true,
+      focusAfterOpen: false, // focusing the link would scroll the page to the map
+      className: "lm-popup",
+      maxWidth: "none",
+      offset: 20,
+      padding: { top: 12, right: 12, bottom: 12, left: 12 },
+    })
+      .setLngLat(lngLat)
+      .setDOMContent(buildPopupContent(listing));
+
+    const open: OpenPopup = {
+      id: listing.id,
+      popup,
+      onClose: () => {
+        if (popupRef.current === open) popupRef.current = null;
+        onSelectRef.current(null);
+      },
+    };
+    popup.on("close", open.onClose);
+    popup.addTo(map);
+    popupRef.current = open;
+
+    // Bring it into view if the marker is off-screen (or hugging an edge).
+    const pt = map.project(lngLat);
+    const { clientWidth: w, clientHeight: hgt } = map.getContainer();
+    const margin = 32;
+    if (pt.x < margin || pt.y < margin || pt.x > w - margin || pt.y > hgt - margin) {
+      map.easeTo({ center: lngLat, duration: 500 });
+    }
+  }, [map, selectedId, located]);
+
+  return (
+    <div className="lm-root size-full">
+      <div ref={containerRef} className="lm-canvas" />
+      <div className="lm-chip tabular">
+        <span className="lm-chip-dot" aria-hidden />
+        <span>
+          <b>{located.length.toLocaleString("en-US")}</b> of {listings.length.toLocaleString("en-US")} on map
+        </span>
+      </div>
+    </div>
+  );
+}

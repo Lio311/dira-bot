@@ -16,6 +16,8 @@ export interface RawListing {
   floor?: number | null;
   price: number | null;
   images?: string[];
+  lat?: number | null;
+  lng?: number | null;
   isAgency?: boolean | null;
   postedAt?: Date | null;
   /** Free-text sources can't always state rooms; accept a missing value when the rest fits. */

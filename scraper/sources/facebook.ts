@@ -47,11 +47,12 @@ export const facebookGroups: Source = {
   key: "fb-group",
   skip: () => apifySkipReason() ?? (groupUrls().length ? null : "FB_GROUP_URLS is empty"),
   async run() {
+    // resultsLimit applies per group, not per run. No onlyPostsNewerThan: the actor bills an
+    // extra event per post when it's set, and CHRONOLOGICAL + (source, id) dedupe covers it.
     const posts = await runActor<GroupPost>(GROUPS_ACTOR, {
       startUrls: groupUrls().map((url) => ({ url })),
-      resultsLimit: Number(process.env.FB_GROUP_POSTS ?? 150),
+      resultsLimit: Number(process.env.FB_POSTS_PER_GROUP ?? 4),
       viewOption: "CHRONOLOGICAL",
-      onlyPostsNewerThan: "3 days",
     });
 
     const listings: RawListing[] = [];

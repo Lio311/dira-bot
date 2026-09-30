@@ -4,6 +4,7 @@ import {
   text,
   integer,
   real,
+  doublePrecision,
   timestamp,
   jsonb,
   uniqueIndex,
@@ -29,6 +30,8 @@ export const listings = pgTable(
     sqm: integer("sqm"),
     floor: integer("floor"),
     price: integer("price"),
+    lat: doublePrecision("lat"),
+    lng: doublePrecision("lng"),
     images: jsonb("images").$type<string[]>().notNull().default([]),
     /** Loose signature (city + street + rooms + sqm) used to spot the same flat on two sites. */
     fingerprint: text("fingerprint"),

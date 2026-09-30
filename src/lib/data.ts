@@ -18,6 +18,8 @@ export interface ListingView {
   sqm: number | null;
   floor: number | null;
   price: number | null;
+  lat: number | null;
+  lng: number | null;
   image: string | null;
   isAgency: boolean | null;
   postedAt: string | null;
@@ -81,6 +83,8 @@ export async function getDashboardData() {
       sqm: l.sqm,
       floor: l.floor,
       price: l.price,
+      lat: l.lat,
+      lng: l.lng,
       image: l.images[0] ?? null,
       isAgency: l.isAgency,
       postedAt: l.postedAt?.toISOString() ?? null,
