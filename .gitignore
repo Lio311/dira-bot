@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+.neon
+!.env.example
+
+# local tooling
+.claude/
+dry-run.json
