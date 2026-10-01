@@ -14,11 +14,18 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f7f6f3" },
+    { media: "(prefers-color-scheme: dark)", color: "#0f0f0e" },
+  ],
 };
 
 export const metadata: Metadata = {
   title: "diraBot",
   description: "4–5 room apartments for sale in Tel Aviv and around, gathered every 8 hours.",
+  // "Add to Home Screen" on iPhone: opens full-screen with this name under the icon
+  // (the icon itself is src/app/apple-icon.png).
+  appleWebApp: { capable: true, title: "diraBot", statusBarStyle: "default" },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
