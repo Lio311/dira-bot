@@ -10,6 +10,8 @@ GitHub Actions (every 8h) ──► scraper/run.ts ──► Neon Postgres ◄�
                                     └──► Gmail (nodemailer): new listings + price drops
 ```
 
+Email alerts go to `NOTIFY_TO` plus every confirmed subscriber. Visitors sign up from the dashboard (double opt-in, stored in the `subscribers` table); each subscriber gets their own message with an unsubscribe link and one-click `List-Unsubscribe` headers.
+
 | Source | Method | Notes |
 |---|---|---|
 | Yad2 | Playwright, reads the page's `__NEXT_DATA__` | Radware sometimes challenges; then falls back to the `parsebird/yad2-real-estate-scraper` Apify actor |
@@ -37,6 +39,6 @@ Other scripts: `npm run db:generate` after schema changes (migrations apply auto
 
 ## Deployment
 
-- **Vercel**: import the repo, set `DATABASE_URL`.
+- **Vercel**: import the repo, set `DATABASE_URL`. For the "Get alerts by email" sign-up, also set `SMTP_USER`, `SMTP_PASS` (same Gmail App Password) and `DASHBOARD_URL`; without SMTP the form says alerts aren't available yet.
 - **GitHub → Settings → Secrets and variables → Actions**: `DATABASE_URL`, `APIFY_TOKEN`, `FB_GROUP_URLS`, `SMTP_USER`, `SMTP_PASS` (Gmail App Password), `NOTIFY_TO`, `DASHBOARD_URL`.
 - Run the workflow once by hand from the Actions tab to verify. GitHub pauses scheduled workflows after 60 days without commits; re-enable from the Actions tab if that happens.

@@ -9,6 +9,7 @@ import { listings, scrapeRuns, type NewListing } from "../src/db/schema";
 import { closeBrowser } from "./lib/browser";
 import { renderEmail, sendEmail } from "./lib/email";
 import { normalize, saveListings, type PriceDrop } from "./lib/store";
+import { sendToSubscribers } from "./lib/subscribers";
 import { yad2 } from "./sources/yad2";
 import { onmap } from "./sources/onmap";
 import { homeless } from "./sources/homeless";
@@ -106,6 +107,7 @@ async function main() {
         .update(listings)
         .set({ notifiedAt: new Date() })
         .where(inArray(listings.id, fresh.map((l) => l.id)));
+      await sendToSubscribers(db!, fresh, drops, log);
     } catch (e) {
       log(`email not sent: ${(e as Error).message}`);
     }

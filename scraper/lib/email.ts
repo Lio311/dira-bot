@@ -1,6 +1,6 @@
-import nodemailer from "nodemailer";
 import { CITY_BY_KEY, PRIORITY_LABEL, SOURCES, type CityKey, type Priority, type SourceKey } from "../../src/lib/config";
 import type { Listing } from "../../src/db/schema";
+import { getMailer } from "../../src/lib/mailer";
 import type { PriceDrop } from "./store";
 
 const MAX_ROWS = 40;
@@ -39,7 +39,13 @@ function row(l: Listing, note?: string) {
   </td></tr>`;
 }
 
-export function renderEmail(fresh: Listing[], drops: PriceDrop[], runWarnings: string[]) {
+export function renderEmail(
+  fresh: Listing[],
+  drops: PriceDrop[],
+  runWarnings: string[],
+  /** Subscriber copies get an unsubscribe footer; the owner's copy (NOTIFY_TO) doesn't. */
+  opts: { unsubscribeUrl?: string } = {},
+) {
   const sorted = [...fresh].sort((a, b) => a.priority - b.priority || (a.price ?? 0) - (b.price ?? 0));
   const shown = sorted.slice(0, MAX_ROWS);
   const dashboard = process.env.DASHBOARD_URL ?? "";
@@ -68,6 +74,7 @@ export function renderEmail(fresh: Listing[], drops: PriceDrop[], runWarnings: s
       <tr><td style="padding:24px 28px 28px">
         ${dashboard ? `<a href="${esc(dashboard)}" style="font-size:13px;color:#0f766e;text-decoration:none;font-weight:600">Open dashboard →</a>` : ""}
         ${runWarnings.length ? `<div style="font-size:11px;color:#a8a29e;margin-top:14px">Run notes: ${esc(runWarnings.slice(0, 6).join(" · "))}</div>` : ""}
+        ${opts.unsubscribeUrl ? `<div style="font-size:11px;color:#a8a29e;margin-top:18px;line-height:1.5">You're getting this because you subscribed to diraBot alerts. <a href="${esc(opts.unsubscribeUrl)}" style="color:#8a8780;text-decoration:underline">Unsubscribe</a></div>` : ""}
       </td></tr>
     </table>
   </td></tr></table></body></html>`;
@@ -79,19 +86,11 @@ export function renderEmail(fresh: Listing[], drops: PriceDrop[], runWarnings: s
   return { subject, html };
 }
 
+/** The owner's digest: one message to NOTIFY_TO (comma-separated), as it has always been. */
 export async function sendEmail(subject: string, html: string) {
-  const { SMTP_USER, SMTP_PASS } = process.env;
-  if (!SMTP_USER || !SMTP_PASS) throw new Error("SMTP_USER / SMTP_PASS not set");
-  const transport = nodemailer.createTransport({
-    host: process.env.SMTP_HOST ?? "smtp.gmail.com",
-    port: Number(process.env.SMTP_PORT ?? 465),
-    secure: true,
-    auth: { user: SMTP_USER, pass: SMTP_PASS },
-  });
-  await transport.sendMail({
-    from: `diraBot <${SMTP_USER}>`,
-    to: process.env.NOTIFY_TO ?? SMTP_USER,
-    subject,
-    html,
-  });
+  const mailer = getMailer();
+  if (!mailer) throw new Error("SMTP_USER / SMTP_PASS not set");
+  const to = process.env.NOTIFY_TO ?? process.env.SMTP_USER ?? "owner@localhost";
+  await mailer.transport.sendMail({ from: mailer.from, to, subject, html });
+  if (mailer.mode === "log") console.log(`[mail:log] owner digest → ${to}: ${subject}`);
 }
