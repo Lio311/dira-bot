@@ -4,6 +4,17 @@ import { sleep } from "./browser";
 
 const API = "https://api.apify.com/v2";
 
+/** The monthly credit is used up: the source is paused, not broken. */
+export class ApifyBudgetError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ApifyBudgetError";
+  }
+}
+
+const resumeDate = (iso?: string) =>
+  iso ? new Date(new Date(iso).getTime() + 1).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "Asia/Jerusalem" }) : "next cycle";
+
 /**
  * Refuses to start a run once this month's usage nears the account limit, and returns
  * how much a single run may charge. Pay-per-event actors bill for every post and every
@@ -12,14 +23,17 @@ const API = "https://api.apify.com/v2";
 async function runBudget(auth: Record<string, string>): Promise<number> {
   const res = await fetch(`${API}/users/me/limits`, { headers: auth });
   if (!res.ok) throw new Error(`Apify limits: HTTP ${res.status}`);
-  const { limits, current } = (await res.json()).data as {
+  const { limits, current, monthlyUsageCycle } = (await res.json()).data as {
     limits: { maxMonthlyUsageUsd: number };
     current: { monthlyUsageUsd: number };
+    monthlyUsageCycle?: { endAt?: string };
   };
   const budget = Number(process.env.APIFY_BUDGET_USD ?? limits.maxMonthlyUsageUsd * 0.9);
   const left = budget - current.monthlyUsageUsd;
   if (left <= 0.05) {
-    throw new Error(`Apify monthly budget reached ($${current.monthlyUsageUsd.toFixed(2)} of $${budget.toFixed(2)})`);
+    throw new ApifyBudgetError(
+      `Apify credit used ($${current.monthlyUsageUsd.toFixed(2)} of $${budget.toFixed(2)}), resumes ${resumeDate(monthlyUsageCycle?.endAt)}`,
+    );
   }
   return Math.min(left, Number(process.env.APIFY_MAX_RUN_USD ?? 0.5));
 }
@@ -35,6 +49,11 @@ export async function runActor<T>(actorId: string, input: unknown, maxWaitMs = 1
     headers: { ...auth, "Content-Type": "application/json" },
     body: JSON.stringify(input),
   });
+  if (start.status === 402 || start.status === 403) {
+    const body = await start.text();
+    if (/platform-feature-disabled|usage/i.test(body)) throw new ApifyBudgetError("Apify monthly credit used up");
+    throw new Error(`Apify ${actorId} start: HTTP ${start.status} ${body.slice(0, 200)}`);
+  }
   if (!start.ok) throw new Error(`Apify ${actorId} start: HTTP ${start.status} ${(await start.text()).slice(0, 200)}`);
   let run = (await start.json()).data as { id: string; status: string; defaultDatasetId: string };
 

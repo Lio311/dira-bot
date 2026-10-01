@@ -984,6 +984,7 @@ function Stat({ label, value, hint, accent }: { label: string; value: string; hi
 const STATUS_COLOR: Record<string, string> = {
   ok: "var(--p1)",
   skipped: "var(--faint)",
+  paused: "var(--faint)",
   blocked: "#d97706",
   error: "#dc2626",
 };
@@ -992,7 +993,8 @@ function StatusPill({ status, lastRun, now }: { status: SourceStatus[]; lastRun:
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   // Intentionally skipped sources (e.g. Facebook Marketplace) aren't failures, so they don't count against health.
-  const tracked = status.filter((s) => s.status !== "skipped");
+  // Paused = the Apify credit ran out; it resumes by itself next cycle.
+  const tracked = status.filter((s) => s.status !== "skipped" && s.status !== "paused");
   const healthy = tracked.filter((s) => s.status === "ok").length;
   const problems = status.some((s) => s.status === "blocked" || s.status === "error");
 
@@ -1050,7 +1052,7 @@ function StatusPill({ status, lastRun, now }: { status: SourceStatus[]; lastRun:
                     <span className="text-[12px] text-faint">{relativeTime(s.finishedAt, now)}</span>
                   </div>
                   <div className="truncate text-[12px] text-muted" title={s.message ?? undefined}>
-                    {s.status === "ok" ? `${s.found} matching · ${s.inserted} new` : s.status === "skipped" ? s.message : `${s.status}: ${s.message ?? ""}`}
+                    {s.status === "ok" ? `${s.found} matching · ${s.inserted} new` : s.status === "skipped" || s.status === "paused" ? s.message : `${s.status}: ${s.message ?? ""}`}
                   </div>
                 </div>
               </div>

@@ -1,6 +1,6 @@
 import { CITIES, CRITERIA } from "../../src/lib/config";
 import { newContext, jitter } from "../lib/browser";
-import { apifySkipReason, runActor } from "../lib/apify";
+import { ApifyBudgetError, apifySkipReason, runActor } from "../lib/apify";
 import { BlockedError, type RawListing, type Source } from "../types";
 
 // Yad2 renders its feed server-side into __NEXT_DATA__ (React Query dehydrated state),
@@ -124,7 +124,12 @@ export const yad2: Source = {
     } catch (e) {
       const skip = apifySkipReason();
       if (!(e instanceof BlockedError) || skip) throw e;
-      return { listings: await viaApify(), warnings: ["direct access challenged; used Apify fallback"] };
+      try {
+        return { listings: await viaApify(), warnings: ["direct access challenged; used Apify fallback"] };
+      } catch (err) {
+        if (err instanceof ApifyBudgetError) throw new ApifyBudgetError(`Yad2 blocks direct access; ${err.message}`);
+        throw err;
+      }
     }
   },
 };

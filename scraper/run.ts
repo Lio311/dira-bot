@@ -15,6 +15,7 @@ import { homeless } from "./sources/homeless";
 import { madlan } from "./sources/madlan";
 import { facebookGroups, facebookMarketplace } from "./sources/facebook";
 import { BlockedError, type Source } from "./types";
+import { ApifyBudgetError } from "./lib/apify";
 
 const ALL: Source[] = [yad2, onmap, homeless, madlan, facebookGroups, facebookMarketplace];
 
@@ -74,14 +75,14 @@ async function main() {
       log(`${source.key}: ${inserted} new`);
       anySucceeded = true;
     } catch (e) {
-      const blocked = e instanceof BlockedError;
+      const status = e instanceof ApifyBudgetError ? "paused" : e instanceof BlockedError ? "blocked" : "error";
       const msg = (e as Error).message;
-      log(`${source.key}: ${blocked ? "BLOCKED" : "ERROR"} ${msg}`);
-      warnings.push(`${source.key} ${blocked ? "blocked" : "failed"}`);
+      log(`${source.key}: ${status.toUpperCase()} ${msg}`);
+      if (status !== "paused") warnings.push(`${source.key} ${status === "blocked" ? "blocked" : "failed"}`);
       if (db && run)
         await db
           .update(scrapeRuns)
-          .set({ status: blocked ? "blocked" : "error", message: msg.slice(0, 500), finishedAt: new Date() })
+          .set({ status, message: msg.slice(0, 500), finishedAt: new Date() })
           .where(eq(scrapeRuns.id, run.id));
     }
   }
