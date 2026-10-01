@@ -92,7 +92,32 @@ export const trackedCities = pgTable(
   (t) => [uniqueIndex("tracked_cities_key_idx").on(t.key), uniqueIndex("tracked_cities_yad2_code_idx").on(t.yad2Code)],
 );
 
+export const SUBSCRIBER_STATUSES = ["pending", "active", "unsubscribed"] as const;
+export type SubscriberStatus = (typeof SUBSCRIBER_STATUSES)[number];
+
+/** Visitors who signed up for the email digest from the dashboard (double opt-in). */
+export const subscribers = pgTable(
+  "subscribers",
+  {
+    id: serial("id").primaryKey(),
+    /** Trimmed and lowercased. */
+    email: text("email").notNull(),
+    status: text("status").$type<SubscriberStatus>().notNull().default("pending"),
+    /** Random, unguessable; used in the confirm and unsubscribe links. */
+    token: text("token").notNull(),
+    /** Only listings at this priority or better (1 = top). Null = everything. */
+    minPriority: integer("min_priority"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    /** Last time a confirmation email went out; rate-limits resends. */
+    confirmSentAt: timestamp("confirm_sent_at", { withTimezone: true }),
+    confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
+    unsubscribedAt: timestamp("unsubscribed_at", { withTimezone: true }),
+  },
+  (t) => [uniqueIndex("subscribers_email_idx").on(t.email), uniqueIndex("subscribers_token_idx").on(t.token)],
+);
+
 export type Listing = typeof listings.$inferSelect;
 export type NewListing = typeof listings.$inferInsert;
 export type ScrapeRun = typeof scrapeRuns.$inferSelect;
 export type TrackedCity = typeof trackedCities.$inferSelect;
+export type Subscriber = typeof subscribers.$inferSelect;

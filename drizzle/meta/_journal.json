@@ -29,6 +29,13 @@
       "when": 1790829198516,
       "tag": "0003_flowery_umar",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1790829462608,
+      "tag": "0004_nosy_namora",
+      "breakpoints": true
     }
   ]
 }
