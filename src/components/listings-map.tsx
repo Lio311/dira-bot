@@ -18,6 +18,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalS
 import { cityName, SOURCES, type SourceKey } from "@/lib/config";
 import type { ListingView } from "@/lib/data";
 import { ils, ilsShort } from "@/lib/format";
+import { STAR_PATH, useStarToggle } from "./favorites";
 
 export interface ListingsMapProps {
   listings: ListingView[]; // the currently filtered listings (some have lat/lng null)
@@ -176,8 +177,51 @@ function setMarkerActive(entry: MarkerEntry | undefined, active: boolean, select
 /* Popup                                                               */
 /* ------------------------------------------------------------------ */
 
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+/** Reflects the listing's star. Returns false if nothing changed. */
+function paintStar(btn: HTMLButtonElement, starred: boolean) {
+  if (btn.getAttribute("aria-pressed") === String(starred)) return false;
+  btn.setAttribute("aria-pressed", String(starred));
+  btn.setAttribute("aria-label", starred ? "Unstar listing" : "Star listing");
+  btn.classList.toggle("is-on", starred);
+  return true;
+}
+
+function popStar(btn: HTMLButtonElement) {
+  btn.classList.remove("is-pop");
+  void btn.offsetWidth; // restart the animation
+  btn.classList.add("is-pop");
+}
+
+/** Star toggle for the popup. Its state follows the listing data (see the sync effect), not the click. */
+function buildStar(starred: boolean, onToggle: (next: boolean) => void) {
+  const btn = h("button", "lm-star");
+  btn.type = "button";
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.setAttribute("viewBox", "0 0 16 16");
+  svg.setAttribute("aria-hidden", "true");
+  const path = document.createElementNS(SVG_NS, "path");
+  path.setAttribute("d", STAR_PATH);
+  path.setAttribute("stroke-width", "1.4");
+  path.setAttribute("stroke-linejoin", "round");
+  svg.append(path);
+  btn.append(svg);
+  paintStar(btn, starred);
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    onToggle(btn.getAttribute("aria-pressed") !== "true");
+  });
+  return btn;
+}
+
 // Built with DOM APIs only: every string here is scraped third-party text.
-function buildPopupContent(l: Located, mapWidth: number, mapHeight: number): HTMLElement {
+function buildPopupContent(
+  l: Located,
+  mapWidth: number,
+  mapHeight: number,
+  onStar: ((next: boolean) => void) | null,
+): HTMLElement {
   // Short maps (the mobile layout) get a horizontal card that fits under a pin.
   const compact = mapHeight < 520;
   const card = h("div", compact ? "lm-card lm-card--compact" : "lm-card");
@@ -229,13 +273,16 @@ function buildPopupContent(l: Located, mapWidth: number, mapHeight: number): HTM
   dot.style.setProperty("--lm-dot", `var(--p${priorityOf(l.priority)})`);
   source.append(dot, document.createTextNode(sourceName(l.source)));
   foot.append(source);
+  const actions = h("div", "lm-card-actions");
+  if (onStar) actions.append(buildStar(l.starredAt != null, onStar));
   if (href) {
     const link = h("a", "lm-card-link", "Open listing ↗");
     link.href = href;
     link.target = "_blank";
     link.rel = "noopener noreferrer";
-    foot.append(link);
+    actions.append(link);
   }
+  if (actions.childElementCount) foot.append(actions);
   body.append(foot);
 
   card.append(body);
@@ -284,9 +331,12 @@ export default function ListingsMap({ listings, hoveredId, selectedId, onHover, 
   // Marker/map listeners are attached once; read callbacks through refs so they never go stale.
   const onHoverRef = useRef(onHover);
   const onSelectRef = useRef(onSelect);
+  const toggleStar = useStarToggle();
+  const toggleStarRef = useRef(toggleStar);
   useLayoutEffect(() => {
     onHoverRef.current = onHover;
     onSelectRef.current = onSelect;
+    toggleStarRef.current = toggleStar;
   });
 
   const dark = useSyncExternalStore(subscribeScheme, isDark, isDarkOnServer);
@@ -487,7 +537,14 @@ export default function ListingsMap({ listings, hoveredId, selectedId, onHover, 
       padding: { top: 12, right: 12, bottom: 12, left: 12 },
     })
       .setLngLat(lngLat)
-      .setDOMContent(buildPopupContent(listing, map.getContainer().clientWidth, map.getContainer().clientHeight));
+      .setDOMContent(
+        buildPopupContent(
+          listing,
+          map.getContainer().clientWidth,
+          map.getContainer().clientHeight,
+          toggleStarRef.current ? (next) => toggleStarRef.current?.(listing.id, next) : null,
+        ),
+      );
 
     const open: OpenPopup = {
       id: listing.id,
@@ -520,6 +577,15 @@ export default function ListingsMap({ listings, hoveredId, selectedId, onHover, 
     content?.addEventListener("animationend", fit, { once: true });
     setTimeout(fit, 260); // reduced motion: no animation, so no animationend
   }, [map, selectedId, located]);
+
+  // Keep the open popup's star in step with the data (optimistic star, rollback, passcode dialog).
+  useEffect(() => {
+    const open = popupRef.current;
+    const btn = open?.popup.getElement()?.querySelector<HTMLButtonElement>(".lm-star");
+    if (!open || !btn) return;
+    const starred = located.find((l) => l.id === open.id)?.starredAt != null;
+    if (paintStar(btn, starred) && starred && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) popStar(btn);
+  }, [located]);
 
   return (
     <div className="lm-root size-full">

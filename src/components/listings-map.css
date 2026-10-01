@@ -331,6 +331,71 @@
   outline-offset: 2px;
 }
 
+.lm-card-actions {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Favorites star: outline when off, gold when on. */
+.lm-star {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    transform 160ms var(--lm-ease),
+    background-color 160ms var(--lm-ease),
+    border-color 160ms var(--lm-ease),
+    color 160ms var(--lm-ease);
+}
+.lm-star svg {
+  width: 15px;
+  height: 15px;
+}
+.lm-star path {
+  fill: transparent;
+  stroke: currentColor;
+  transition:
+    fill 200ms var(--lm-ease),
+    stroke 200ms var(--lm-ease);
+}
+.lm-star.is-on path {
+  fill: var(--star);
+  stroke: var(--star-edge);
+}
+@media (hover: hover) {
+  .lm-star:hover {
+    border-color: var(--border-strong);
+    background: var(--surface-2);
+    color: var(--fg);
+  }
+}
+.lm-star:active {
+  transform: scale(0.94);
+}
+.lm-star:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.lm-star.is-pop svg {
+  animation: lm-star-pop 420ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes lm-star-pop {
+  from {
+    transform: scale(0.4);
+  }
+}
+
 /* ------------------------------------------------------------------ */
 /* Overlay chip                                                        */
 /* ------------------------------------------------------------------ */
@@ -450,10 +515,13 @@
   .lm-pill-dot,
   .lm-card-media img,
   .lm-card-link,
+  .lm-star,
+  .lm-star path,
   .lm-root .maplibregl-ctrl-group button {
     transition: none;
   }
-  .lm-popup.maplibregl-popup .maplibregl-popup-content {
+  .lm-popup.maplibregl-popup .maplibregl-popup-content,
+  .lm-star.is-pop svg {
     animation: none;
   }
 }
