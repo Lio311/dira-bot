@@ -21,7 +21,7 @@ import type { PriceEntry } from "@/lib/price-history";
 
 const EASE: [number, number, number, number] = [0.23, 1, 0.32, 1];
 const WIDTH = 288;
-const GUTTER = 12;
+const GUTTER = 16;
 
 type Dir = "down" | "up" | "flat";
 const dirOf = (n: number): Dir => (n < 0 ? "down" : n > 0 ? "up" : "flat");

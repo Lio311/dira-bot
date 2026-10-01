@@ -256,9 +256,12 @@
 
 .lm-card-was {
   margin-top: 2px;
+  overflow: hidden;
   color: var(--muted);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .lm-card-was-delta {
   font-weight: 600;

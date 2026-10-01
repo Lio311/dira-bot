@@ -265,6 +265,7 @@ function buildPopupContent(
     was.dataset.dir = dir;
     const delta = h("span", "lm-card-was-delta", `${dir === "down" ? "↓" : dir === "up" ? "↑" : "↔"} ${ilsShort(Math.abs(l.priceChange))}`);
     was.append(delta, document.createTextNode(` · ${hint}`));
+    was.title = hint;
     body.append(was);
   }
 
