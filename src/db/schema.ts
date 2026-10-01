@@ -12,6 +12,9 @@ import {
   boolean,
 } from "drizzle-orm/pg-core";
 
+export const FEATURE_KEYS = ["parking", "elevator", "balcony", "safeRoom", "airConditioning", "storage", "accessible", "renovated"] as const;
+export type FeatureKey = (typeof FEATURE_KEYS)[number];
+
 export const listings = pgTable(
   "listings",
   {
@@ -42,6 +45,12 @@ export const listings = pgTable(
     lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
     priceHistory: jsonb("price_history").$type<{ price: number; at: string }[]>().notNull().default([]),
     notifiedAt: timestamp("notified_at", { withTimezone: true }),
+    /** Amenities from the source (parking, elevator, balcony, safeRoom, …); absent key = unknown. */
+    features: jsonb("features").$type<Partial<Record<FeatureKey, boolean>>>().notNull().default({}),
+    /** Set once the listing's own page confirms the ad was taken down. */
+    removedAt: timestamp("removed_at", { withTimezone: true }),
+    /** Last time we checked a not-recently-seen listing's page for removal. */
+    checkedAt: timestamp("checked_at", { withTimezone: true }),
   },
   (t) => [
     uniqueIndex("listings_source_external_idx").on(t.source, t.externalId),
