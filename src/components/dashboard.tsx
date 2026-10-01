@@ -231,9 +231,11 @@ const plural = (n: number, word: string) => `${n.toLocaleString("en-US")} ${word
 /* ───────────────────────── Dashboard ───────────────────────── */
 
 type View = "grid" | "list" | "map";
+/** "removed" = ads confirmed taken down, shown apart as "Not relevant". */
+type Scope = "active" | "removed";
 
 export function Dashboard({
-  listings,
+  listings: all,
   status,
   cities,
   passcodeRequired,
@@ -245,6 +247,10 @@ export function Dashboard({
   passcodeRequired: boolean;
   now: number;
 }) {
+  // Everything below (results, counts, stats, map) works on the chosen scope only.
+  const [scope, setScope] = useState<Scope>("active");
+  const removedCount = useMemo(() => all.filter((l) => l.removedAt).length, [all]);
+  const listings = useMemo(() => all.filter((l) => !!l.removedAt === (scope === "removed")), [all, scope]);
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<Sort>("priority");
@@ -315,7 +321,7 @@ export function Dashboard({
   }, [listings, match, f.amenities]);
 
   const stats = useMemo(() => {
-    const fresh = listings.filter((l) => isFresh(l.firstSeenAt, 24, now)).length;
+    const fresh = listings.filter((l) => isFresh(l.removedAt ?? l.firstSeenAt, 24, now)).length;
     const drops = listings.filter((l) => l.previousPrice && l.price && l.price < l.previousPrice).length;
     const perSqm = median(filtered.filter((l) => l.price && l.sqm).map((l) => l.price! / l.sqm!));
     return { fresh, drops, perSqm, medianPrice: median(filtered.flatMap((l) => (l.price ? [l.price] : []))) };
@@ -344,6 +350,12 @@ export function Dashboard({
     setFilters(NO_FILTERS);
     setQuery("");
     setLimit(PAGE);
+  };
+
+  const changeScope = (s: Scope) => {
+    setScope(s);
+    setLimit(PAGE);
+    setSelectedId(null);
   };
 
   const onQuery = (v: string) => {
@@ -524,8 +536,8 @@ export function Dashboard({
           </p>
 
           <dl className="mt-8 grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-border bg-border sm:grid-cols-4">
-            <Stat label="Tracked listings" value={listings.length.toLocaleString("en-US")} />
-            <Stat label="New in 24h" value={stats.fresh.toLocaleString("en-US")} accent={stats.fresh > 0} />
+            <Stat label={scope === "removed" ? "Not relevant" : "Tracked listings"} value={listings.length.toLocaleString("en-US")} />
+            <Stat label={scope === "removed" ? "Taken down in 24h" : "New in 24h"} value={stats.fresh.toLocaleString("en-US")} accent={stats.fresh > 0} />
             <Stat label="Median price" value={ilsShort(stats.medianPrice)} hint="current filter" />
             <Stat label="Median ₪/m²" value={stats.perSqm ? `₪${Math.round(stats.perSqm).toLocaleString("en-US")}` : "—"} hint="current filter" />
           </dl>
@@ -575,11 +587,32 @@ export function Dashboard({
           </div>
         </div>
 
-        <div className="flex items-center justify-between py-5 text-[13px] text-muted">
-          <span className="tabular">
-            <span className="font-medium text-fg">{filtered.length.toLocaleString("en-US")}</span> listing{filtered.length === 1 ? "" : "s"}
-            {stats.drops > 0 && <span> · {stats.drops} price drops</span>}
-          </span>
+        <div className="flex items-center justify-between gap-3 py-5 text-[13px] text-muted">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
+            {(removedCount > 0 || scope === "removed") && (
+              <Segmented
+                id="scope"
+                label="Listing status"
+                value={scope}
+                onChange={changeScope}
+                options={[
+                  { value: "active", label: "Active" },
+                  {
+                    value: "removed",
+                    label: (
+                      <>
+                        Not relevant <span className="ml-1 tabular opacity-60">{removedCount}</span>
+                      </>
+                    ),
+                  },
+                ]}
+              />
+            )}
+            <span className="tabular">
+              <span className="font-medium text-fg">{filtered.length.toLocaleString("en-US")}</span> {scope === "removed" ? "taken down" : `listing${filtered.length === 1 ? "" : "s"}`}
+              {stats.drops > 0 && scope === "active" && <span> · {stats.drops} price drops</span>}
+            </span>
+          </div>
           <AnimatePresence>
             {activeFilters > 0 && (
               <motion.button
@@ -588,7 +621,7 @@ export function Dashboard({
                 exit={{ opacity: 0, x: 6 }}
                 transition={{ duration: 0.16, ease: EASE }}
                 onClick={reset}
-                className="font-medium text-muted transition-colors hover:text-fg active:scale-[0.97]"
+                className="shrink-0 whitespace-nowrap font-medium text-muted transition-colors hover:text-fg active:scale-[0.97]"
               >
                 Clear {activeFilters} filter{activeFilters === 1 ? "" : "s"}
               </motion.button>
@@ -1097,11 +1130,17 @@ function StatusPill({ status, lastRun, now }: { status: SourceStatus[]; lastRun:
                 <span className="mt-1.5 size-1.5 shrink-0 rounded-full" style={{ background: STATUS_COLOR[s.status] ?? "var(--faint)" }} />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-baseline justify-between gap-2 text-[13px]">
-                    <span className="font-medium">{SOURCES[s.source as SourceKey]?.name ?? s.source}</span>
+                    <span className="font-medium">{s.source === "verify" ? "Removal check" : (SOURCES[s.source as SourceKey]?.name ?? s.source)}</span>
                     <span className="text-[12px] text-faint">{relativeTime(s.finishedAt, now)}</span>
                   </div>
                   <div className="truncate text-[12px] text-muted" title={s.message ?? undefined}>
-                    {s.status === "ok" ? `${s.found} matching · ${s.inserted} new` : s.status === "skipped" || s.status === "paused" ? s.message : `${s.status}: ${s.message ?? ""}`}
+                    {s.status === "ok"
+                      ? s.source === "verify"
+                        ? `${s.found} checked · ${s.inserted} taken down`
+                        : `${s.found} matching · ${s.inserted} new`
+                      : s.status === "skipped" || s.status === "paused"
+                        ? s.message
+                        : `${s.status}: ${s.message ?? ""}`}
                   </div>
                 </div>
               </div>
