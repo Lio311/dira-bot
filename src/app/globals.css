@@ -93,6 +93,17 @@
 
 html {
   background: var(--bg);
+  /* No double-tap zoom on touch screens (iOS Safari ignores user-scalable=no for that). */
+  touch-action: manipulation;
+}
+
+/* iOS zooms into any focused field under 16px; keep phone inputs at 16px. */
+@media (pointer: coarse) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
 }
 
 body {

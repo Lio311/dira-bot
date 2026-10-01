@@ -18,6 +18,7 @@ interface OnmapItem {
   created_at?: string;
   address?: {
     he?: { city_name?: string; neighborhood?: string; street_name?: string; house_number?: string | number | null };
+    en?: { city_name?: string };
     location?: { lat?: number; lon?: number };
   };
   additional_info?: { rooms?: number | null; area?: { base?: number | null }; floor?: { on_the?: number | null }; parking?: OnmapParking };
@@ -137,6 +138,21 @@ async function fetchPage(cityName: string, skip: number) {
   return (await res.json()) as { data: OnmapItem[]; meta?: { hasNextPage?: boolean } };
 }
 
+/**
+ * OnMap opens a listing only when the search path names an area: a bare
+ * `/search/homes/buy?property=` redirects to the national map and drops the listing.
+ * Centering on the listing's coordinates works for every city; the English city slug
+ * is the fallback.
+ */
+function listingUrl(i: OnmapItem) {
+  const loc = i.address?.location;
+  if (loc?.lat != null && loc?.lon != null) {
+    return `https://www.onmap.co.il/search/homes/buy/c_${loc.lat},${loc.lon}/z_15?property=${i.slug}`;
+  }
+  const city = (i.address?.en?.city_name ?? "").toLowerCase().replace(/['’]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  return `https://www.onmap.co.il/search/homes/buy${city ? `/${city}` : ""}?property=${i.slug}`;
+}
+
 export const onmap: Source = {
   key: "onmap",
   async run({ cities }) {
@@ -155,7 +171,7 @@ export const onmap: Source = {
             listings.push({
               source: "onmap",
               externalId: i.id,
-              url: `https://www.onmap.co.il/search/homes/buy?property=${i.slug}`,
+              url: listingUrl(i),
               cityText: a?.city_name ?? city.onmap,
               neighborhood: a?.neighborhood ?? null,
               street,

@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Heebo } from "next/font/google";
 import "./globals.css";
 
@@ -6,6 +6,15 @@ const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 // Geist has no Hebrew glyphs; Heebo picks up addresses and post text.
 const heebo = Heebo({ variable: "--font-heebo", subsets: ["hebrew"] });
+
+// App-like on phones: no pinch or double-tap zoom, and no auto-zoom when an input gets focus.
+// The map keeps its own pinch-to-zoom (MapLibre handles those gestures itself).
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+};
 
 export const metadata: Metadata = {
   title: "diraBot",
