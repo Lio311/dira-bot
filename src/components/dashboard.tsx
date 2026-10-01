@@ -314,6 +314,15 @@ export function Dashboard({
 
   // Slider histograms + "no value" counts, each against every *other* active filter. Only while a panel is open.
   const panelOpen = sheetOpen || moreOpen;
+
+  // While a filters panel is open, keep the results area at least as tall as when it
+  // opened. Otherwise every slider step that removes rows shrinks the page and the
+  // browser jumps the scroll position under the user.
+  const resultsRef = useRef<HTMLDivElement>(null);
+  const [lockedHeight, setLockedHeight] = useState<number | null>(null);
+  useEffect(() => {
+    setLockedHeight(panelOpen ? (resultsRef.current?.offsetHeight ?? null) : null);
+  }, [panelOpen]);
   const rangeStats = useMemo(() => {
     if (!panelOpen) return null;
     return Object.fromEntries(
@@ -694,6 +703,7 @@ export function Dashboard({
           </AnimatePresence>
         </div>
 
+        <div ref={resultsRef} style={lockedHeight ? { minHeight: lockedHeight } : undefined}>
         {view === "map" ? (
           <div className="flex flex-col gap-4 lg:grid lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] lg:items-start lg:gap-6">
             {/* First in the DOM so it sits above the list on small screens; right-hand sticky column on lg+. */}
@@ -728,6 +738,7 @@ export function Dashboard({
             <Pager shown={limit} total={filtered.length} onMore={() => setLimit((n) => n + PAGE)} />
           </>
         )}
+        </div>
       </main>
 
       <footer className="border-t border-border">
@@ -817,27 +828,22 @@ const Results = memo(function Results({
     );
   }
   return (
-    <motion.ul
-      layout
-      className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${view === "grid" ? "lg:grid-cols-3 xl:grid-cols-4" : ""}`}
-    >
-      <AnimatePresence mode="popLayout" initial={false}>
-        {items.map((l, i) => (
-          <motion.li
-            key={l.id}
-            id={`l-${l.id}`}
-            layout="position"
-            initial={{ opacity: 0, scale: 0.97, y: 6 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.97 }}
-            transition={{ duration: 0.28, ease: EASE, delay: Math.min(i % PAGE, 12) * 0.018 }}
-            className="scroll-mt-[var(--map-top)] scroll-mb-4"
-          >
-            <ListingCard l={l} now={now} onHover={onHover} highlighted={l.id === hoveredId || l.id === selectedId} />
-          </motion.li>
-        ))}
-      </AnimatePresence>
-    </motion.ul>
+    // No layout/exit animations: while a slider is dragged the result set changes on every
+    // step, and sliding cards around reads as the page scrolling under the user.
+    <ul className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${view === "grid" ? "lg:grid-cols-3 xl:grid-cols-4" : ""}`}>
+      {items.map((l) => (
+        <motion.li
+          key={l.id}
+          id={`l-${l.id}`}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.2, ease: EASE }}
+          className="scroll-mt-[var(--map-top)] scroll-mb-4"
+        >
+          <ListingCard l={l} now={now} onHover={onHover} highlighted={l.id === hoveredId || l.id === selectedId} />
+        </motion.li>
+      ))}
+    </ul>
   );
 });
 
