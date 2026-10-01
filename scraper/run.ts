@@ -9,6 +9,7 @@ import { listings, scrapeRuns, type NewListing } from "../src/db/schema";
 import { closeBrowser } from "./lib/browser";
 import { renderEmail, sendEmail } from "./lib/email";
 import { normalize, saveListings, type PriceDrop } from "./lib/store";
+import { verifyRemoved } from "./lib/verify-removed";
 import { yad2 } from "./sources/yad2";
 import { onmap } from "./sources/onmap";
 import { homeless } from "./sources/homeless";
@@ -23,6 +24,7 @@ const flag = (name: string) => args.find((a) => a === `--${name}` || a.startsWit
 const only = flag("only")?.split("=")[1]?.split(",");
 const dry = !!flag("dry");
 const noEmail = !!flag("no-email");
+const noVerify = !!flag("no-verify");
 
 const log = (...m: unknown[]) => console.log(new Date().toISOString().slice(11, 19), ...m);
 
@@ -85,6 +87,8 @@ async function main() {
           .where(eq(scrapeRuns.id, run.id));
     }
   }
+  // Confirm take-downs of listings the scrapes stopped seeing (their own pages, gently).
+  if (db && !noVerify) await verifyRemoved(db, sources.map((s) => s.key));
   await closeBrowser();
 
   if (dry) {
@@ -93,8 +97,11 @@ async function main() {
     return anySucceeded;
   }
 
-  // Everything not yet emailed, excluding cross-site duplicates of listings we already have.
-  const fresh = await db!.select().from(listings).where(and(isNull(listings.notifiedAt), isNull(listings.duplicateOf)));
+  // Everything not yet emailed, excluding cross-site duplicates and ads already taken down.
+  const fresh = await db!
+    .select()
+    .from(listings)
+    .where(and(isNull(listings.notifiedAt), isNull(listings.duplicateOf), isNull(listings.removedAt)));
   if (noEmail || (!fresh.length && !drops.length)) {
     log(noEmail ? "email disabled for this run" : "nothing new to email");
   } else {

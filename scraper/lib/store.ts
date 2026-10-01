@@ -111,6 +111,8 @@ export async function saveListings(db: Db, batch: NewListing[]) {
         .update(listings)
         .set({
           lastSeenAt: now,
+          // Seen again, so not taken down after all (or re-listed).
+          removedAt: null,
           url: item.url,
           images: item.images?.length ? item.images : prev.images,
           sqm: item.sqm ?? prev.sqm,

@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, gt, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, desc, gt, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import { listings, scrapeRuns } from "@/db/schema";
 
@@ -26,6 +26,8 @@ export interface ListingView {
   firstSeenAt: string;
   lastSeenAt: string;
   previousPrice: number | null;
+  /** Set when the ad was confirmed taken down ("Not relevant" on the dashboard). */
+  removedAt: string | null;
   alsoOn: { source: string; url: string }[];
 }
 
@@ -39,16 +41,24 @@ export interface SourceStatus {
 }
 
 const ACTIVE_DAYS = 30;
+/** How long taken-down listings stay visible under "Not relevant". */
+const REMOVED_DAYS = 30;
 
 export async function getDashboardData() {
   const db = getDb();
   const since = new Date(Date.now() - ACTIVE_DAYS * 86_400_000);
+  const removedSince = new Date(Date.now() - REMOVED_DAYS * 86_400_000);
 
   const [rows, dupes, runs] = await Promise.all([
     db
       .select()
       .from(listings)
-      .where(and(isNull(listings.duplicateOf), gt(listings.lastSeenAt, since)))
+      .where(
+        and(
+          isNull(listings.duplicateOf),
+          or(and(isNull(listings.removedAt), gt(listings.lastSeenAt, since)), gt(listings.removedAt, removedSince)),
+        ),
+      )
       .orderBy(desc(listings.firstSeenAt))
       .limit(3000),
     db
@@ -91,6 +101,7 @@ export async function getDashboardData() {
       firstSeenAt: l.firstSeenAt.toISOString(),
       lastSeenAt: l.lastSeenAt.toISOString(),
       previousPrice: prev,
+      removedAt: l.removedAt?.toISOString() ?? null,
       alsoOn: (alsoOn.get(l.id) ?? []).map((d) => ({ source: d.source, url: d.url })),
     };
   });

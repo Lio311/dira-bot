@@ -23,6 +23,8 @@ Apify sources run once a day (00:00 UTC run) unless `APIFY_EVERY_RUN=1`.
 
 Duplicates: `(source, external_id)` is unique; a loose fingerprint (city + street + number + rooms + m², or post text for Facebook) links the same flat across sites so it shows once, with "also on …".
 
+Taken-down ads: missing from a scrape proves nothing, since each run reads only the newest pages. After the sources run, `scraper/lib/verify-removed.ts` checks a few listings per source that no scrape has seen for 3+ days, using each listing's own page. OnMap's API reports `is_active:false` or 404. On Homeless the ad says "עסקה זו כבר נסגרה" or redirects to the home page. On Yad2 the signal is a 404 or a "removed" page. A bot challenge stops that source's checks for the run, and nothing gets recorded. Madlan listings count as removed after 21 days unseen, which is a weaker signal. Facebook posts are never removed. Removed listings get `removed_at`, never get emailed and show under "Not relevant" on the dashboard. If a later scrape sees one again, `removed_at` is cleared. Tuning: `VERIFY_PER_SOURCE` (15), `VERIFY_STALE_DAYS` (3), `VERIFY_RECHECK_DAYS` (2), `MADLAN_GONE_DAYS` (21). To skip the checks, pass `--no-verify`.
+
 ## Local development
 
 ```bash
