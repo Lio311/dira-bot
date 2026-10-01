@@ -36,6 +36,13 @@
       "when": 1790829462608,
       "tag": "0004_nosy_namora",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1790830388148,
+      "tag": "0005_pink_warbird",
+      "breakpoints": true
     }
   ]
 }
