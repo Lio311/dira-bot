@@ -1,5 +1,6 @@
 // Renders the app icons (home-screen / PWA) from the diraBot mark.
 // Usage: node scripts/generate-icons.mjs
+import { writeFileSync } from "node:fs";
 import { chromium } from "playwright";
 
 const BG_TOP = "#2a2926";
@@ -41,6 +42,18 @@ const outputs = [
   { file: "public/icon-maskable-512.png", size: 512, scale: 0.5 },
 ];
 
+/** Browser-tab favicon: the mark on a dark rounded square (same as src/app/icon.svg). */
+function faviconSvg(size) {
+  const r = size * 0.22;
+  const markPx = size * 0.78;
+  const offset = (size - markPx) / 2;
+  const k = markPx / 32;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+    <rect width="${size}" height="${size}" rx="${r}" fill="#1c1b19"/>
+    <g transform="translate(${offset} ${offset}) scale(${k})">${mark.replaceAll('stroke-width="2.2"', 'stroke-width="2.6"').replaceAll('stroke-width="2"', 'stroke-width="2.4"')}</g>
+  </svg>`;
+}
+
 const browser = await chromium.launch();
 const page = await browser.newPage({ deviceScaleFactor: 1 });
 for (const { file, size, scale } of outputs) {
@@ -49,4 +62,40 @@ for (const { file, size, scale } of outputs) {
   await page.screenshot({ path: file, clip: { x: 0, y: 0, width: size, height: size } });
   console.log("wrote", file);
 }
+// Favicons: 32px PNG for <link rel="icon">, and a PNG-in-ICO /favicon.ico for clients
+// that request it directly.
+const favicons = {};
+for (const size of [16, 32, 48]) {
+  await page.setViewportSize({ width: size, height: size });
+  await page.setContent(`<html><body style="margin:0;background:transparent">${faviconSvg(size)}</body></html>`);
+  favicons[size] = await page.screenshot({ clip: { x: 0, y: 0, width: size, height: size }, omitBackground: true });
+}
+writeFileSync("public/favicon-32.png", favicons[32]);
+console.log("wrote public/favicon-32.png");
+writeFileSync("src/app/favicon.ico", toIco([16, 32, 48].map((size) => ({ size, png: favicons[size] }))));
+console.log("wrote src/app/favicon.ico");
+
 await browser.close();
+
+/** ICO container holding PNG images (supported by every current browser). */
+function toIco(images) {
+  const header = Buffer.alloc(6);
+  header.writeUInt16LE(0, 0);
+  header.writeUInt16LE(1, 2);
+  header.writeUInt16LE(images.length, 4);
+  let offset = 6 + 16 * images.length;
+  const dir = images.map(({ size, png }) => {
+    const e = Buffer.alloc(16);
+    e.writeUInt8(size >= 256 ? 0 : size, 0);
+    e.writeUInt8(size >= 256 ? 0 : size, 1);
+    e.writeUInt8(0, 2);
+    e.writeUInt8(0, 3);
+    e.writeUInt16LE(1, 4);
+    e.writeUInt16LE(32, 6);
+    e.writeUInt32LE(png.length, 8);
+    e.writeUInt32LE(offset, 12);
+    offset += png.length;
+    return e;
+  });
+  return Buffer.concat([header, ...dir, ...images.map((i) => i.png)]);
+}

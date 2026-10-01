@@ -28,7 +28,14 @@ export const metadata: Metadata = {
   appleWebApp: { capable: true, title: "diraBot", statusBarStyle: "default" },
   // Served from the site root as well: iOS probes /apple-touch-icon.png directly when a
   // cached page has no icon tag, and shows a letter tile if that 404s.
-  icons: { apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }] },
+  // Declaring `icons` replaces Next's file-based icon tags, so list the tab icon here too.
+  icons: {
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/favicon-32.png", sizes: "32x32", type: "image/png" },
+    ],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
