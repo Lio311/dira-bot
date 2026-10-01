@@ -33,7 +33,8 @@ function iconSvg(size, scale) {
 
 const outputs = [
   // iOS home screen. iOS rounds the corners itself, so the square stays full-bleed.
-  { file: "src/app/apple-icon.png", size: 180, scale: 0.62 },
+  { file: "public/apple-touch-icon.png", size: 180, scale: 0.62 },
+  { file: "public/apple-touch-icon-precomposed.png", size: 180, scale: 0.62 },
   // Android / PWA: "any" keeps the mark large; "maskable" stays inside the 80% safe zone.
   { file: "public/icon-192.png", size: 192, scale: 0.62 },
   { file: "public/icon-512.png", size: 512, scale: 0.62 },

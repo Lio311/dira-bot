@@ -24,8 +24,11 @@ export const metadata: Metadata = {
   title: "diraBot",
   description: "4–5 room apartments for sale in Tel Aviv and around, gathered every 8 hours.",
   // "Add to Home Screen" on iPhone: opens full-screen with this name under the icon
-  // (the icon itself is src/app/apple-icon.png).
+  // (the icon itself is public/apple-touch-icon.png).
   appleWebApp: { capable: true, title: "diraBot", statusBarStyle: "default" },
+  // Served from the site root as well: iOS probes /apple-touch-icon.png directly when a
+  // cached page has no icon tag, and shows a letter tile if that 404s.
+  icons: { apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }] },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
