@@ -1,8 +1,10 @@
 import "server-only";
-import { and, desc, gt, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, desc, gt, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { getDb } from "@/db/client";
-import { listings, scrapeRuns } from "@/db/schema";
+import { listings, scrapeRuns, type FeatureKey } from "@/db/schema";
 import { usableImage } from "@/lib/images";
+import { getCities } from "@/lib/cities";
+import { passcodeRequired } from "@/lib/passcode";
 
 export interface ListingView {
   id: number;
@@ -23,11 +25,24 @@ export interface ListingView {
   lng: number | null;
   image: string | null;
   isAgency: boolean | null;
+  /** Amenities the source states; a missing key means unknown. */
+  features: Partial<Record<FeatureKey, boolean>>;
   postedAt: string | null;
   firstSeenAt: string;
   lastSeenAt: string;
   previousPrice: number | null;
+  /** Set when the ad was confirmed taken down ("Not relevant" on the dashboard). */
+  removedAt: string | null;
   alsoOn: { source: string; url: string }[];
+}
+
+/** A tracked city as the dashboard needs it (built-in or added from the dashboard). */
+export interface CityView {
+  key: string;
+  name: string;
+  he: string;
+  priority: number;
+  custom: boolean;
 }
 
 export interface SourceStatus {
@@ -40,16 +55,24 @@ export interface SourceStatus {
 }
 
 const ACTIVE_DAYS = 30;
+/** How long taken-down listings stay visible under "Not relevant". */
+const REMOVED_DAYS = 30;
 
 export async function getDashboardData() {
   const db = getDb();
   const since = new Date(Date.now() - ACTIVE_DAYS * 86_400_000);
+  const removedSince = new Date(Date.now() - REMOVED_DAYS * 86_400_000);
 
-  const [rows, dupes, runs] = await Promise.all([
+  const [rows, dupes, runs, cities] = await Promise.all([
     db
       .select()
       .from(listings)
-      .where(and(isNull(listings.duplicateOf), gt(listings.lastSeenAt, since)))
+      .where(
+        and(
+          isNull(listings.duplicateOf),
+          or(and(isNull(listings.removedAt), gt(listings.lastSeenAt, since)), gt(listings.removedAt, removedSince)),
+        ),
+      )
       .orderBy(desc(listings.firstSeenAt))
       .limit(3000),
     db
@@ -62,6 +85,7 @@ export async function getDashboardData() {
       .from(scrapeRuns)
       .where(sql`${scrapeRuns.status} <> 'running'`)
       .orderBy(scrapeRuns.source, desc(scrapeRuns.startedAt)),
+    getCities(db),
   ]);
 
   const alsoOn = Map.groupBy(dupes, (d) => d.duplicateOf!);
@@ -88,10 +112,12 @@ export async function getDashboardData() {
       lng: l.lng,
       image: l.images.map((i) => usableImage(i)).find(Boolean) ?? null,
       isAgency: l.isAgency,
+      features: l.features,
       postedAt: l.postedAt?.toISOString() ?? null,
       firstSeenAt: l.firstSeenAt.toISOString(),
       lastSeenAt: l.lastSeenAt.toISOString(),
       previousPrice: prev,
+      removedAt: l.removedAt?.toISOString() ?? null,
       alsoOn: (alsoOn.get(l.id) ?? []).map((d) => ({ source: d.source, url: d.url })),
     };
   });
@@ -105,6 +131,8 @@ export async function getDashboardData() {
     message: r.message,
   }));
 
+  const cityViews: CityView[] = cities.map((c) => ({ key: c.key, name: c.name, he: c.he, priority: c.priority, custom: !!c.custom }));
+
   // Server timestamp so relative times render identically on server and client.
-  return { listings: view, status, now: Date.now() };
+  return { listings: view, status, cities: cityViews, passcodeRequired: passcodeRequired(), now: Date.now() };
 }

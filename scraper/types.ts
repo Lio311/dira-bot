@@ -1,4 +1,8 @@
-import type { SourceKey } from "../src/lib/config";
+import type { FeatureKey } from "../src/db/schema";
+import type { City, SourceKey } from "../src/lib/config";
+
+/** Amenities a source states. A missing key means unknown, `false` means explicitly absent. */
+export type Features = Partial<Record<FeatureKey, boolean>>;
 
 /** What every source adapter returns before city matching and criteria filtering. */
 export interface RawListing {
@@ -24,6 +28,7 @@ export interface RawListing {
   lenientRooms?: boolean;
   /** Overrides the address-based duplicate signature (free-text sources). */
   fingerprint?: string | null;
+  features?: Features;
 }
 
 export class BlockedError extends Error {
@@ -39,9 +44,14 @@ export interface SourceResult {
   warnings: string[];
 }
 
+export interface SourceContext {
+  /** Built-in cities plus the ones added from the dashboard (see getCities). */
+  cities: City[];
+}
+
 export type Source = {
   key: SourceKey;
   /** Returns a reason when the source can't run in this environment (missing token, disabled). */
   skip?: () => string | null;
-  run: () => Promise<SourceResult>;
+  run: (ctx: SourceContext) => Promise<SourceResult>;
 };

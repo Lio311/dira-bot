@@ -1,5 +1,5 @@
-import { CITIES, CRITERIA } from "../../src/lib/config";
-import { apifySkipReason, runActor } from "../lib/apify";
+import { CRITERIA } from "../../src/lib/config";
+import { apifyFeatures, apifySkipReason, runActor } from "../lib/apify";
 import type { RawListing, Source } from "../types";
 
 // Madlan sits behind a PerimeterX "press & hold" challenge that we don't try to defeat.
@@ -29,13 +29,13 @@ interface MadlanItem {
 export const madlan: Source = {
   key: "madlan",
   skip: apifySkipReason,
-  async run() {
+  async run({ cities }) {
     const perCity = Number(process.env.MADLAN_MAX_PER_CITY ?? 8);
     const warnings: string[] = [];
     const listings: RawListing[] = [];
 
     const items = await runActor<MadlanItem>(ACTOR, {
-      city: CITIES.map((c) => c.he).join(","),
+      city: cities.map((c) => c.he).join(","),
       dealType: "buy",
       maxItems: perCity,
       minPrice: CRITERIA.minPrice,
@@ -61,6 +61,7 @@ export const madlan: Source = {
         lng: i.longitude ?? null,
         images: i.images ?? [],
         isAgency: i.hasAgent ?? null,
+        features: apifyFeatures(i),
         postedAt: i.firstSeen ? new Date(i.firstSeen) : null,
         title: street,
       });

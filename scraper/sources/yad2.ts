@@ -1,6 +1,7 @@
-import { CITIES, CRITERIA } from "../../src/lib/config";
+import { CRITERIA, type City } from "../../src/lib/config";
 import { newContext, jitter } from "../lib/browser";
-import { ApifyBudgetError, apifySkipReason, runActor } from "../lib/apify";
+import { ApifyBudgetError, apifyFeatures, apifySkipReason, runActor } from "../lib/apify";
+import { parseFeatures } from "../lib/hebrew";
 import { BlockedError, type RawListing, type Source } from "../types";
 
 // Yad2 renders its feed server-side into __NEXT_DATA__ (React Query dehydrated state),
@@ -21,6 +22,11 @@ interface Yad2Item {
   };
   additionalDetails?: { property?: { text?: string }; roomsCount?: number; squareMeter?: number };
   metaData?: { coverImage?: string; images?: string[]; squareMeterBuild?: number };
+  /**
+   * Up to 3 highlight tags the advertiser picked, e.g. "חניה", "ממ\"ד", "2 מרפסות", "נוף פתוח לעיר".
+   * (additionalDetails.propertyCondition is a bare numeric id with no label in the feed, so it's not used.)
+   */
+  tags?: { name?: string }[];
 }
 
 function feedUrl(cityCode: string, page: number) {
@@ -54,6 +60,8 @@ function toListing(i: Yad2Item): RawListing | null {
     lng: i.address.coords?.lon ?? null,
     images: i.metaData?.images?.length ? i.metaData.images : i.metaData?.coverImage ? [i.metaData.coverImage] : [],
     isAgency: i.adType ? i.adType !== "private" : null,
+    // Tags are highlights, not a full checklist: a missing tag means unknown, never "no".
+    features: parseFeatures(i.tags?.map((t) => t.name).join(", ")),
     title: [i.additionalDetails?.property?.text, street].filter(Boolean).join(" · ") || null,
   };
 }
@@ -79,10 +87,10 @@ interface ApifyYad2Item {
 }
 
 // When Radware challenges us, fall back to a managed Apify actor (paid per listing).
-async function viaApify(): Promise<RawListing[]> {
+async function viaApify(cities: City[]): Promise<RawListing[]> {
   const items = await runActor<ApifyYad2Item>(process.env.YAD2_ACTOR ?? "parsebird/yad2-real-estate-scraper", {
     // The paid fallback covers only the top-priority cities (Tel Aviv, Herzliya by default).
-    city: CITIES.filter((c) => c.priority <= Number(process.env.YAD2_APIFY_MAX_PRIORITY ?? 2))
+    city: cities.filter((c) => c.priority <= Number(process.env.YAD2_APIFY_MAX_PRIORITY ?? 2))
       .map((c) => c.he)
       .join(","),
     dealType: "buy",
@@ -111,6 +119,7 @@ async function viaApify(): Promise<RawListing[]> {
       lat: i.latitude ?? null,
       lng: i.longitude ?? null,
       isAgency: i.hasAgent ?? (i.adType ? i.adType !== "private" : null),
+      features: apifyFeatures(i),
       postedAt: i.publishedAt ? new Date(i.publishedAt) : null,
       title: i.address ?? null,
     }));
@@ -118,14 +127,14 @@ async function viaApify(): Promise<RawListing[]> {
 
 export const yad2: Source = {
   key: "yad2",
-  async run() {
+  async run({ cities }) {
     try {
-      return await direct();
+      return await direct(cities);
     } catch (e) {
       const skip = apifySkipReason();
       if (!(e instanceof BlockedError) || skip) throw e;
       try {
-        return { listings: await viaApify(), warnings: ["direct access challenged; used Apify fallback"] };
+        return { listings: await viaApify(cities), warnings: ["direct access challenged; used Apify fallback"] };
       } catch (err) {
         if (err instanceof ApifyBudgetError) throw new ApifyBudgetError(`Yad2 blocks direct access; ${err.message}`);
         throw err;
@@ -134,7 +143,7 @@ export const yad2: Source = {
   },
 };
 
-async function direct() {
+async function direct(cities: City[]) {
   const maxPages = Number(process.env.YAD2_MAX_PAGES ?? 2);
   const ctx = await newContext();
   const page = await ctx.newPage();
@@ -142,7 +151,7 @@ async function direct() {
   const warnings: string[] = [];
 
   try {
-    for (const city of CITIES) {
+    for (const city of cities) {
       for (let p = 1; p <= maxPages; p++) {
         try {
           await page.goto(feedUrl(city.yad2, p), { waitUntil: "domcontentloaded", timeout: 45_000 });

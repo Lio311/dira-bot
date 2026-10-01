@@ -1,5 +1,5 @@
 import { and, eq, inArray, isNull } from "drizzle-orm";
-import { CRITERIA, inCriteria, matchCity } from "../../src/lib/config";
+import { CITIES, CRITERIA, inCriteria, matchCity, type City } from "../../src/lib/config";
 import type { getDb } from "../../src/db/client";
 import { listings, type Listing, type NewListing } from "../../src/db/schema";
 import type { RawListing } from "../types";
@@ -7,8 +7,8 @@ import type { RawListing } from "../types";
 type Db = ReturnType<typeof getDb>;
 
 /** City match + criteria filter. Returns null for listings we don't track. */
-export function normalize(r: RawListing): NewListing | null {
-  const city = matchCity(r.cityText);
+export function normalize(r: RawListing, cities: readonly City[] = CITIES): NewListing | null {
+  const city = matchCity(r.cityText, cities);
   if (!city) return null;
   const rooms = r.rooms != null && Number.isFinite(r.rooms) ? r.rooms : null;
   const price = r.price != null && Number.isFinite(r.price) ? Math.round(r.price) : null;
@@ -37,6 +37,7 @@ export function normalize(r: RawListing): NewListing | null {
     images: (r.images ?? []).slice(0, 8),
     ...coords(r.lat, r.lng),
     isAgency: r.isAgency ?? null,
+    features: r.features ?? {},
     postedAt: r.postedAt && !isNaN(r.postedAt.getTime()) ? r.postedAt : null,
     fingerprint: r.fingerprint ?? fingerprint(city.key, street, rooms, r.sqm ?? null),
   };
@@ -111,11 +112,15 @@ export async function saveListings(db: Db, batch: NewListing[]) {
         .update(listings)
         .set({
           lastSeenAt: now,
+          // Seen again, so not taken down after all (or re-listed).
+          removedAt: null,
           url: item.url,
           images: item.images?.length ? item.images : prev.images,
           sqm: item.sqm ?? prev.sqm,
           lat: item.lat ?? prev.lat,
           lng: item.lng ?? prev.lng,
+          // New readings add to (or correct) what we know; keys this run didn't see stay.
+          features: { ...prev.features, ...item.features },
           ...(priceChanged && {
             price: item.price,
             priceHistory: [...prev.priceHistory, { price: item.price!, at: now.toISOString() }],
