@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useState } from "react";
-import { CITY_BY_KEY, PRIORITY_LABEL, SOURCES, type CityKey, type Priority, type SourceKey } from "@/lib/config";
+import { cityName, PRIORITY_LABEL, SOURCES, type Priority, type SourceKey } from "@/lib/config";
 import type { ListingView } from "@/lib/data";
 import { ils, ilsShort, isFresh, relativeTime } from "@/lib/format";
 import { LogoMark } from "./logo";
@@ -27,7 +27,6 @@ export function PriorityBadge({ p, withCity, size = "md" }: { p: number; withCit
 }
 
 const sourceName = (s: string) => SOURCES[s as SourceKey]?.name ?? s;
-const cityName = (c: string) => CITY_BY_KEY[c as CityKey]?.name ?? c;
 
 function facts(l: ListingView) {
   return [

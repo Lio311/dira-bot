@@ -1,4 +1,4 @@
-import { CITIES, CRITERIA } from "../../src/lib/config";
+import { CRITERIA } from "../../src/lib/config";
 import { apifySkipReason, runActor } from "../lib/apify";
 import type { RawListing, Source } from "../types";
 
@@ -29,13 +29,13 @@ interface MadlanItem {
 export const madlan: Source = {
   key: "madlan",
   skip: apifySkipReason,
-  async run() {
+  async run({ cities }) {
     const perCity = Number(process.env.MADLAN_MAX_PER_CITY ?? 8);
     const warnings: string[] = [];
     const listings: RawListing[] = [];
 
     const items = await runActor<MadlanItem>(ACTOR, {
-      city: CITIES.map((c) => c.he).join(","),
+      city: cities.map((c) => c.he).join(","),
       dealType: "buy",
       maxItems: perCity,
       minPrice: CRITERIA.minPrice,

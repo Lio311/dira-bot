@@ -2,6 +2,8 @@ import "server-only";
 import { and, desc, gt, isNotNull, isNull, sql } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import { listings, scrapeRuns } from "@/db/schema";
+import { getCities } from "@/lib/cities";
+import { passcodeRequired } from "@/lib/passcode";
 
 export interface ListingView {
   id: number;
@@ -29,6 +31,15 @@ export interface ListingView {
   alsoOn: { source: string; url: string }[];
 }
 
+/** A tracked city as the dashboard needs it (built-in or added from the dashboard). */
+export interface CityView {
+  key: string;
+  name: string;
+  he: string;
+  priority: number;
+  custom: boolean;
+}
+
 export interface SourceStatus {
   source: string;
   status: string;
@@ -44,7 +55,7 @@ export async function getDashboardData() {
   const db = getDb();
   const since = new Date(Date.now() - ACTIVE_DAYS * 86_400_000);
 
-  const [rows, dupes, runs] = await Promise.all([
+  const [rows, dupes, runs, cities] = await Promise.all([
     db
       .select()
       .from(listings)
@@ -61,6 +72,7 @@ export async function getDashboardData() {
       .from(scrapeRuns)
       .where(sql`${scrapeRuns.status} <> 'running'`)
       .orderBy(scrapeRuns.source, desc(scrapeRuns.startedAt)),
+    getCities(db),
   ]);
 
   const alsoOn = Map.groupBy(dupes, (d) => d.duplicateOf!);
@@ -104,6 +116,8 @@ export async function getDashboardData() {
     message: r.message,
   }));
 
+  const cityViews: CityView[] = cities.map((c) => ({ key: c.key, name: c.name, he: c.he, priority: c.priority, custom: !!c.custom }));
+
   // Server timestamp so relative times render identically on server and client.
-  return { listings: view, status, now: Date.now() };
+  return { listings: view, status, cities: cityViews, passcodeRequired: passcodeRequired(), now: Date.now() };
 }

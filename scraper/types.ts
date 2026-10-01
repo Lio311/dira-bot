@@ -1,4 +1,4 @@
-import type { SourceKey } from "../src/lib/config";
+import type { City, SourceKey } from "../src/lib/config";
 
 /** What every source adapter returns before city matching and criteria filtering. */
 export interface RawListing {
@@ -39,9 +39,14 @@ export interface SourceResult {
   warnings: string[];
 }
 
+export interface SourceContext {
+  /** Built-in cities plus the ones added from the dashboard (see getCities). */
+  cities: City[];
+}
+
 export type Source = {
   key: SourceKey;
   /** Returns a reason when the source can't run in this environment (missing token, disabled). */
   skip?: () => string | null;
-  run: () => Promise<SourceResult>;
+  run: (ctx: SourceContext) => Promise<SourceResult>;
 };

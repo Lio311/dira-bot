@@ -1,4 +1,4 @@
-import { CITIES } from "../../src/lib/config";
+import type { City } from "../../src/lib/config";
 import { newContext } from "../lib/browser";
 import { BlockedError, type RawListing, type Source } from "../types";
 
@@ -7,10 +7,13 @@ import { BlockedError, type RawListing, type Source } from "../types";
 // reads a single city board, rotating by 8-hour slot, with Tel Aviv in every other slot.
 // Each row is a <tr id="ad_{id}"> with fixed-order cells.
 
-const ROTATION = [
-  "tel-aviv", "herzliya", "tel-aviv", "ramat-gan", "tel-aviv", "givatayim",
-  "tel-aviv", "kiryat-ono", "tel-aviv", "netanya", "tel-aviv", "savyon",
-];
+const BUILT_IN_ROTATION = ["herzliya", "ramat-gan", "givatayim", "kiryat-ono", "netanya", "savyon"];
+
+/** Tel Aviv, then the next city, alternating; cities added from the dashboard join the cycle. */
+function rotation(cities: City[]) {
+  const others = [...BUILT_IN_ROTATION, ...cities.filter((c) => c.custom).map((c) => c.key)];
+  return others.flatMap((key) => ["tel-aviv", key]);
+}
 
 function parsePrice(s: string) {
   const n = parseInt(s.replace(/[^\d]/g, ""), 10);
@@ -24,10 +27,12 @@ function parseDate(s: string) {
 
 export const homeless: Source = {
   key: "homeless",
-  async run() {
+  async run({ cities }) {
     const slot = Math.floor(Date.now() / (8 * 3600_000));
-    const cityKey = process.env.HOMELESS_CITY ?? ROTATION[slot % ROTATION.length];
-    const city = CITIES.find((c) => c.key === cityKey)!;
+    const order = rotation(cities);
+    const cityKey = process.env.HOMELESS_CITY ?? order[slot % order.length];
+    const city = cities.find((c) => c.key === cityKey);
+    if (!city) return { listings: [], warnings: [`unknown city "${cityKey}"`] };
     const ctx = await newContext();
     const page = await ctx.newPage();
 

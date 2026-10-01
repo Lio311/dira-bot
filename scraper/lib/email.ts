@@ -1,5 +1,5 @@
 import nodemailer from "nodemailer";
-import { CITY_BY_KEY, PRIORITY_LABEL, SOURCES, type CityKey, type Priority, type SourceKey } from "../../src/lib/config";
+import { CITIES, cityName, PRIORITY_LABEL, SOURCES, type City, type Priority, type SourceKey } from "../../src/lib/config";
 import type { Listing } from "../../src/db/schema";
 import type { PriceDrop } from "./store";
 
@@ -15,9 +15,8 @@ const PRIORITY_STYLE: Record<Priority, { bg: string; fg: string }> = {
 const ils = (n: number | null) => (n == null ? "—" : `₪${n.toLocaleString("en-US")}`);
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 
-function row(l: Listing, note?: string) {
+function row(l: Listing, cities: readonly City[], note?: string) {
   const p = PRIORITY_STYLE[l.priority as Priority];
-  const city = CITY_BY_KEY[l.city as CityKey];
   const place = [l.neighborhood, l.street].filter(Boolean).join(", ");
   const facts = [l.rooms ? `${l.rooms} rooms` : null, l.sqm ? `${l.sqm} m²` : null, l.floor != null ? `floor ${l.floor}` : null]
     .filter(Boolean)
@@ -26,7 +25,7 @@ function row(l: Listing, note?: string) {
   <tr><td style="padding:14px 0;border-bottom:1px solid #ecebe8">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
       <td style="vertical-align:top">
-        <span style="display:inline-block;padding:2px 8px;border-radius:999px;background:${p.bg};color:${p.fg};font-size:11px;font-weight:600;letter-spacing:.02em">${PRIORITY_LABEL[l.priority as Priority]} · ${city?.name ?? l.city}</span>
+        <span style="display:inline-block;padding:2px 8px;border-radius:999px;background:${p.bg};color:${p.fg};font-size:11px;font-weight:600;letter-spacing:.02em">${PRIORITY_LABEL[l.priority as Priority]} · ${esc(cityName(l.city, cities))}</span>
         <span style="font-size:11px;color:#8a8780;margin-left:6px">${SOURCES[l.source as SourceKey]?.name ?? l.source}</span>
         <div style="font-size:18px;font-weight:650;color:#1c1b19;margin-top:6px;font-variant-numeric:tabular-nums">${ils(l.price)}${note ? ` <span style="font-size:12px;font-weight:500;color:#0b6b3a">${note}</span>` : ""}</div>
         <div style="font-size:13px;color:#57534e;margin-top:2px">${facts}</div>
@@ -39,7 +38,7 @@ function row(l: Listing, note?: string) {
   </td></tr>`;
 }
 
-export function renderEmail(fresh: Listing[], drops: PriceDrop[], runWarnings: string[]) {
+export function renderEmail(fresh: Listing[], drops: PriceDrop[], runWarnings: string[], cities: readonly City[] = CITIES) {
   const sorted = [...fresh].sort((a, b) => a.priority - b.priority || (a.price ?? 0) - (b.price ?? 0));
   const shown = sorted.slice(0, MAX_ROWS);
   const dashboard = process.env.DASHBOARD_URL ?? "";
@@ -60,8 +59,8 @@ export function renderEmail(fresh: Listing[], drops: PriceDrop[], runWarnings: s
       </td></tr>
       <tr><td style="padding:0 28px">
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-          ${drops.map((d) => row(d.listing, `↓ from ${ils(d.from)}`)).join("")}
-          ${shown.map((l) => row(l)).join("")}
+          ${drops.map((d) => row(d.listing, cities, `↓ from ${ils(d.from)}`)).join("")}
+          ${shown.map((l) => row(l, cities)).join("")}
         </table>
         ${sorted.length > MAX_ROWS ? `<p style="font-size:13px;color:#57534e;margin:16px 0 0">+${sorted.length - MAX_ROWS} more on the dashboard.</p>` : ""}
       </td></tr>
@@ -74,7 +73,7 @@ export function renderEmail(fresh: Listing[], drops: PriceDrop[], runWarnings: s
 
   const top = sorted[0];
   const subject = fresh.length
-    ? `diraBot · ${fresh.length} new${top ? ` · top: ${CITY_BY_KEY[top.city as CityKey]?.name} ${ils(top.price)}` : ""}`
+    ? `diraBot · ${fresh.length} new${top ? ` · top: ${cityName(top.city, cities)} ${ils(top.price)}` : ""}`
     : `diraBot · ${drops.length} price drop${drops.length === 1 ? "" : "s"}`;
   return { subject, html };
 }

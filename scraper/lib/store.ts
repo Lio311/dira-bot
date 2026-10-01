@@ -1,5 +1,5 @@
 import { and, eq, inArray, isNull } from "drizzle-orm";
-import { CRITERIA, inCriteria, matchCity } from "../../src/lib/config";
+import { CITIES, CRITERIA, inCriteria, matchCity, type City } from "../../src/lib/config";
 import type { getDb } from "../../src/db/client";
 import { listings, type Listing, type NewListing } from "../../src/db/schema";
 import type { RawListing } from "../types";
@@ -7,8 +7,8 @@ import type { RawListing } from "../types";
 type Db = ReturnType<typeof getDb>;
 
 /** City match + criteria filter. Returns null for listings we don't track. */
-export function normalize(r: RawListing): NewListing | null {
-  const city = matchCity(r.cityText);
+export function normalize(r: RawListing, cities: readonly City[] = CITIES): NewListing | null {
+  const city = matchCity(r.cityText, cities);
   if (!city) return null;
   const rooms = r.rooms != null && Number.isFinite(r.rooms) ? r.rooms : null;
   const price = r.price != null && Number.isFinite(r.price) ? Math.round(r.price) : null;

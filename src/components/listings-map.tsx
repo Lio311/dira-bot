@@ -15,7 +15,7 @@ import {
   setWorkerUrl,
 } from "maplibre-gl";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { CITY_BY_KEY, SOURCES, type CityKey, type SourceKey } from "@/lib/config";
+import { cityName, SOURCES, type SourceKey } from "@/lib/config";
 import type { ListingView } from "@/lib/data";
 import { ils, ilsShort } from "@/lib/format";
 
@@ -113,7 +113,7 @@ function placeOf(l: ListingView): string {
   return (
     [l.street, l.neighborhood].filter(Boolean).join(", ") ||
     l.title ||
-    CITY_BY_KEY[l.city as CityKey]?.name ||
+    cityName(l.city) ||
     ""
   );
 }

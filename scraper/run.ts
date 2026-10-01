@@ -6,6 +6,8 @@ import { and, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { closeDb, getDb } from "../src/db/client";
 import { listings, scrapeRuns, type NewListing } from "../src/db/schema";
+import { getCities } from "../src/lib/cities";
+import { CITIES } from "../src/lib/config";
 import { closeBrowser } from "./lib/browser";
 import { renderEmail, sendEmail } from "./lib/email";
 import { normalize, saveListings, type PriceDrop } from "./lib/store";
@@ -30,6 +32,10 @@ async function main() {
   const sources = only ? ALL.filter((s) => only.includes(s.key)) : ALL;
   const db = dry ? null : getDb();
   if (db) await migrate(db, { migrationsFolder: "drizzle" });
+  // Dry runs read the added cities too when a database is configured (read-only).
+  const cities = process.env.DATABASE_URL ? await getCities(db ?? undefined) : CITIES;
+  const custom = cities.filter((c) => c.custom);
+  if (custom.length) log(`cities: ${cities.length} (added from the dashboard: ${custom.map((c) => c.name).join(", ")})`);
 
   const warnings: string[] = [];
   const drops: PriceDrop[] = [];
@@ -47,8 +53,8 @@ async function main() {
     log(`${source.key}: start`);
     const [run] = db ? await db.insert(scrapeRuns).values({ source: source.key, status: "running" }).returning() : [];
     try {
-      const res = await source.run();
-      const kept = res.listings.map(normalize).filter((l): l is NewListing => l !== null);
+      const res = await source.run({ cities });
+      const kept = res.listings.map((l) => normalize(l, cities)).filter((l): l is NewListing => l !== null);
       log(`${source.key}: ${res.listings.length} scraped, ${kept.length} match criteria`);
       res.warnings.forEach((w) => log(`  ⚠ ${w}`));
       warnings.push(...res.warnings.map((w) => `${source.key}: ${w}`));
@@ -99,7 +105,7 @@ async function main() {
     log(noEmail ? "email disabled for this run" : "nothing new to email");
   } else {
     try {
-      const { subject, html } = renderEmail(fresh, drops, warnings);
+      const { subject, html } = renderEmail(fresh, drops, warnings, cities);
       await sendEmail(subject, html);
       log(`email sent: ${subject}`);
       await db!
