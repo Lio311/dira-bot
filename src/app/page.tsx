@@ -6,5 +6,13 @@ export default async function Page() {
   // Listings change every scrape; always render from the database.
   await connection();
   const data = await getDashboardData();
-  return <Dashboard listings={data.listings} status={data.status} now={data.now} />;
+  return (
+    <Dashboard
+      listings={data.listings}
+      status={data.status}
+      cities={data.cities}
+      passcodeRequired={data.passcodeRequired}
+      now={data.now}
+    />
+  );
 }

@@ -14,9 +14,10 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
-import { CITIES, CRITERIA, SOURCES, type SourceKey } from "@/lib/config";
-import type { ListingView, SourceStatus } from "@/lib/data";
+import { CRITERIA, SOURCES, type SourceKey } from "@/lib/config";
+import type { CityView, ListingView, SourceStatus } from "@/lib/data";
 import { ilsShort, isFresh, relativeTime } from "@/lib/format";
+import { AddCityButton } from "./add-city";
 import { buildHistogram, Chip, RangeSlider, Segmented, Select, Toggle, ToggleGroup } from "./controls";
 import { ListingCard, ListingRow } from "./listing-card";
 import { Logo } from "./logo";
@@ -223,7 +224,19 @@ const plural = (n: number, word: string) => `${n.toLocaleString("en-US")} ${word
 
 type View = "grid" | "list" | "map";
 
-export function Dashboard({ listings, status, now }: { listings: ListingView[]; status: SourceStatus[]; now: number }) {
+export function Dashboard({
+  listings,
+  status,
+  cities,
+  passcodeRequired,
+  now,
+}: {
+  listings: ListingView[];
+  status: SourceStatus[];
+  cities: CityView[];
+  passcodeRequired: boolean;
+  now: number;
+}) {
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<Sort>("priority");
@@ -371,7 +384,7 @@ export function Dashboard({ listings, status, now }: { listings: ListingView[]; 
   ];
   const sourceOptions = [{ value: "all", label: "All" }, ...presentSources.map((s) => ({ value: s, label: SOURCES[s].name }))];
 
-  const cityChips = CITIES.map((c) => (
+  const cityChips = cities.map((c) => (
     <Chip key={c.key} active={filters.cities.includes(c.key)} dotColor={`var(--p${c.priority})`} onClick={() => update({ cities: toggleIn(filters.cities, c.key) })}>
       {c.name}
       <span className="tabular opacity-60">{counts.cities.get(c.key) ?? 0}</span>
@@ -504,6 +517,7 @@ export function Dashboard({ listings, status, now }: { listings: ListingView[]; 
               <Segmented id="priority" label="Priority" value={filters.priority} onChange={(v) => update({ priority: v })} options={priorityOptions} />
               <div className="mx-1 h-5 w-px shrink-0 bg-border" />
               {cityChips}
+              <AddCityButton cities={cities} passcodeRequired={passcodeRequired} />
             </div>
 
             <div className="mt-2.5 flex flex-wrap items-center gap-2">
@@ -622,7 +636,10 @@ export function Dashboard({ listings, status, now }: { listings: ListingView[]; 
           <Segmented id="priority-sheet" full label="Priority" value={filters.priority} onChange={(v) => update({ priority: v })} options={priorityOptions} />
         </FilterSection>
         <FilterSection title="Cities">
-          <div className="flex flex-wrap gap-2">{cityChips}</div>
+          <div className="flex flex-wrap gap-2">
+            {cityChips}
+            <AddCityButton cities={cities} passcodeRequired={passcodeRequired} />
+          </div>
         </FilterSection>
         <FilterSection>
           <div className="grid grid-cols-2 gap-2">

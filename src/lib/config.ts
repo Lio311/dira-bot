@@ -140,6 +140,22 @@ export const CITIES: City[] = [
 
 export const CITY_BY_KEY = Object.fromEntries(CITIES.map((c) => [c.key, c])) as Record<CityKey, City>;
 
+/** Most cities that can be added from the dashboard on top of the built-ins. */
+export const MAX_CUSTOM_CITIES = 8;
+
+/** "TEL AVIV - YAFO" → "Tel Aviv - Yafo"; letters after an apostrophe stay lowercase ("Ra'anana"). */
+export const titleCase = (s: string) =>
+  s.toLowerCase().replace(/(^|[\s\-(/])(\p{L})/gu, (_, before: string, letter: string) => before + letter.toUpperCase());
+
+/**
+ * Display name for a stored city key. Looks in `cities` (pass the merged list when you
+ * have it), then the built-ins, and otherwise title-cases the key: custom city keys are
+ * slugs of their English name.
+ */
+export function cityName(key: string, cities: readonly City[] = CITIES): string {
+  return cities.find((c) => c.key === key)?.name ?? CITY_BY_KEY[key as CityKey]?.name ?? titleCase(key.replace(/-/g, " "));
+}
+
 /**
  * Built-in cities followed by the custom ones (skipping any that duplicate a built-in).
  * Built-ins keep their order so scraping them works exactly as before; with no custom

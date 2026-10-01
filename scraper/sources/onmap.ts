@@ -1,4 +1,3 @@
-import { CITIES } from "../../src/lib/config";
 import { jitter, userAgent } from "../lib/browser";
 import { BlockedError, type RawListing, type Source } from "../types";
 
@@ -58,11 +57,11 @@ async function fetchPage(cityName: string, skip: number) {
 
 export const onmap: Source = {
   key: "onmap",
-  async run() {
+  async run({ cities }) {
     const listings: RawListing[] = [];
     const warnings: string[] = [];
 
-    for (const city of CITIES) {
+    for (const city of cities) {
       try {
         for (let skip = 0; skip < 200; skip += 50) {
           const { data, meta } = await fetchPage(city.onmap, skip);

@@ -1,4 +1,4 @@
-import { CITIES, CRITERIA } from "../../src/lib/config";
+import { CRITERIA, type City } from "../../src/lib/config";
 import { newContext, jitter } from "../lib/browser";
 import { ApifyBudgetError, apifySkipReason, runActor } from "../lib/apify";
 import { BlockedError, type RawListing, type Source } from "../types";
@@ -79,10 +79,10 @@ interface ApifyYad2Item {
 }
 
 // When Radware challenges us, fall back to a managed Apify actor (paid per listing).
-async function viaApify(): Promise<RawListing[]> {
+async function viaApify(cities: City[]): Promise<RawListing[]> {
   const items = await runActor<ApifyYad2Item>(process.env.YAD2_ACTOR ?? "parsebird/yad2-real-estate-scraper", {
     // The paid fallback covers only the top-priority cities (Tel Aviv, Herzliya by default).
-    city: CITIES.filter((c) => c.priority <= Number(process.env.YAD2_APIFY_MAX_PRIORITY ?? 2))
+    city: cities.filter((c) => c.priority <= Number(process.env.YAD2_APIFY_MAX_PRIORITY ?? 2))
       .map((c) => c.he)
       .join(","),
     dealType: "buy",
@@ -118,14 +118,14 @@ async function viaApify(): Promise<RawListing[]> {
 
 export const yad2: Source = {
   key: "yad2",
-  async run() {
+  async run({ cities }) {
     try {
-      return await direct();
+      return await direct(cities);
     } catch (e) {
       const skip = apifySkipReason();
       if (!(e instanceof BlockedError) || skip) throw e;
       try {
-        return { listings: await viaApify(), warnings: ["direct access challenged; used Apify fallback"] };
+        return { listings: await viaApify(cities), warnings: ["direct access challenged; used Apify fallback"] };
       } catch (err) {
         if (err instanceof ApifyBudgetError) throw new ApifyBudgetError(`Yad2 blocks direct access; ${err.message}`);
         throw err;
@@ -134,7 +134,7 @@ export const yad2: Source = {
   },
 };
 
-async function direct() {
+async function direct(cities: City[]) {
   const maxPages = Number(process.env.YAD2_MAX_PAGES ?? 2);
   const ctx = await newContext();
   const page = await ctx.newPage();
@@ -142,7 +142,7 @@ async function direct() {
   const warnings: string[] = [];
 
   try {
-    for (const city of CITIES) {
+    for (const city of cities) {
       for (let p = 1; p <= maxPages; p++) {
         try {
           await page.goto(feedUrl(city.yad2, p), { waitUntil: "domcontentloaded", timeout: 45_000 });

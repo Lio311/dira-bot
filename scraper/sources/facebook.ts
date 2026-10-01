@@ -1,4 +1,4 @@
-import { CITIES, matchCity } from "../../src/lib/config";
+import { matchCity } from "../../src/lib/config";
 import { apifySkipReason, everyNDaysSkipReason, runActor } from "../lib/apify";
 import { firstLine, isSalePost, parsePrice, parseRooms, parseSqm, textFingerprint } from "../lib/hebrew";
 import type { RawListing, Source } from "../types";
@@ -49,7 +49,7 @@ export const facebookGroups: Source = {
     apifySkipReason() ??
     (groupUrls().length ? null : "FB_GROUP_URLS is empty") ??
     everyNDaysSkipReason(Number(process.env.FB_EVERY_DAYS ?? 3)),
-  async run() {
+  async run({ cities }) {
     // resultsLimit applies per group, not per run. No onlyPostsNewerThan: the actor bills an
     // extra event per post when it's set, and CHRONOLOGICAL + (source, id) dedupe covers it.
     const posts = await runActor<GroupPost>(GROUPS_ACTOR, {
@@ -70,7 +70,7 @@ export const facebookGroups: Source = {
       if (!p.id || !text || !isSalePost(text)) continue;
       // Only trust a city named in the post itself: regional groups carry ads from
       // neighbouring towns we don't track.
-      const city = matchCity(text);
+      const city = matchCity(text, cities);
       const listedPrice = typeof p.price === "number" ? p.price : p.price ? parseInt(p.price.replace(/[^\d]/g, ""), 10) || null : null;
       const image = p.attachments?.map((a) => a.photo_image?.uri ?? a.image?.uri ?? a.thumbnail).find(Boolean);
       listings.push({
@@ -97,10 +97,12 @@ export const facebookGroups: Source = {
 export const facebookMarketplace: Source = {
   key: "fb-marketplace",
   skip: () => apifySkipReason() ?? (process.env.FB_MARKETPLACE === "1" ? null : "FB_MARKETPLACE not enabled"),
-  async run() {
+  async run({ cities }) {
     const items = await runActor<MarketplaceItem>(MARKETPLACE_ACTOR, {
       dealType: "BUY",
-      cities: CITIES.map((c) => c.key),
+      // The actor takes its own city slugs, which match our built-in keys but not the
+      // CBS-derived keys of added cities ("petah-tiqwa" vs "petah-tikva"), so those are left out.
+      cities: cities.filter((c) => !c.custom).map((c) => c.key),
       matchCityOnly: true,
       fetchDetails: true,
       maxPerCoord: Number(process.env.FB_MARKETPLACE_PER_CITY ?? 20),

@@ -31,6 +31,7 @@ export function Segmented<T extends string | number>({
         return (
           <button
             key={String(o.value)}
+            type="button"
             role="radio"
             aria-checked={active}
             aria-label={o.ariaLabel}
