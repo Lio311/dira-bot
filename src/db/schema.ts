@@ -51,6 +51,8 @@ export const listings = pgTable(
     removedAt: timestamp("removed_at", { withTimezone: true }),
     /** Last time we checked a not-recently-seen listing's page for removal. */
     checkedAt: timestamp("checked_at", { withTimezone: true }),
+    /** When the owner starred the listing from the dashboard (favorites, synced across devices). Null = not starred. */
+    starredAt: timestamp("starred_at", { withTimezone: true }),
   },
   (t) => [
     uniqueIndex("listings_source_external_idx").on(t.source, t.externalId),

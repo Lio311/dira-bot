@@ -33,6 +33,8 @@ export interface ListingView {
   previousPrice: number | null;
   /** Set when the ad was confirmed taken down ("Not relevant" on the dashboard). */
   removedAt: string | null;
+  /** When the owner starred it (favorites); null = not starred. */
+  starredAt: string | null;
   alsoOn: { source: string; url: string }[];
 }
 
@@ -70,10 +72,16 @@ export async function getDashboardData() {
       .where(
         and(
           isNull(listings.duplicateOf),
-          or(and(isNull(listings.removedAt), gt(listings.lastSeenAt, since)), gt(listings.removedAt, removedSince)),
+          or(
+            and(isNull(listings.removedAt), gt(listings.lastSeenAt, since)),
+            gt(listings.removedAt, removedSince),
+            // A star never silently ages out.
+            isNotNull(listings.starredAt),
+          ),
         ),
       )
-      .orderBy(desc(listings.firstSeenAt))
+      // Starred first so the row limit can't drop them.
+      .orderBy(sql`${listings.starredAt} is null`, desc(listings.firstSeenAt))
       .limit(3000),
     db
       .select({ duplicateOf: listings.duplicateOf, source: listings.source, url: listings.url })
@@ -118,6 +126,7 @@ export async function getDashboardData() {
       lastSeenAt: l.lastSeenAt.toISOString(),
       previousPrice: prev,
       removedAt: l.removedAt?.toISOString() ?? null,
+      starredAt: l.starredAt?.toISOString() ?? null,
       alsoOn: (alsoOn.get(l.id) ?? []).map((d) => ({ source: d.source, url: d.url })),
     };
   });

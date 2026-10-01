@@ -5,6 +5,7 @@ import { cityName, PRIORITY_LABEL, SOURCES, type Priority, type SourceKey } from
 import type { ListingView } from "@/lib/data";
 import { ils, ilsShort, isFresh, relativeTime } from "@/lib/format";
 import { AmenityList } from "./amenities";
+import { StarButton } from "./favorites";
 import { LogoMark } from "./logo";
 
 export const priorityVars = (p: number) => ({
@@ -77,144 +78,159 @@ export const ListingCard = memo(function ListingCard({
   const fresh = isFresh(l.firstSeenAt, 24, now);
   const removed = !!l.removedAt;
 
+  // The wrapper owns hover and lift so the star (a sibling: a button can't live inside the link) moves with the card.
   return (
-    <a
-      href={l.url}
-      target="_blank"
-      rel="noopener noreferrer"
+    <div
       onMouseEnter={onHover && (() => onHover(l.id))}
       onMouseLeave={onHover && (() => onHover(null))}
-      className={`group flex h-full flex-col overflow-hidden rounded-2xl border bg-surface outline-none transition-[translate,scale,box-shadow,border-color,opacity] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] hover:-translate-y-0.5 hover:shadow-[var(--shadow-lift)] focus-visible:ring-2 focus-visible:ring-accent active:scale-[0.99] ${
-        highlighted
-          ? "-translate-y-0.5 border-accent shadow-[var(--shadow-lift)] ring-1 ring-accent"
-          : "border-border shadow-[var(--shadow-card)] hover:border-border-strong"
-      } ${removed ? "opacity-70 hover:opacity-100 focus-visible:opacity-100" : ""}`}
+      className={`group relative h-full transition-[translate] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] hover:-translate-y-0.5 ${highlighted ? "-translate-y-0.5" : ""}`}
     >
-      <div className="relative aspect-[16/10] overflow-hidden">
-        {imgOk ? (
-          // Remote images come from many CDNs; a plain img avoids per-host config.
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={l.image!}
-            alt=""
-            loading="lazy"
-            referrerPolicy="no-referrer"
-            onError={() => setImgOk(false)}
-            className={`size-full object-cover transition-transform duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] group-hover:scale-[1.03] ${removed ? "grayscale" : ""}`}
-          />
-        ) : (
-          <div className="blueprint grid size-full place-items-center text-faint">
-            <LogoMark size={34} className="opacity-50" />
-          </div>
-        )}
-        <div className="absolute inset-x-0 top-0 flex items-start justify-between p-2.5">
-          <PriorityBadge p={l.priority} withCity={cityName(l.city)} />
-          <span className="rounded-full bg-black/55 px-2 py-0.5 text-[11px] font-medium text-white backdrop-blur-md">
-            {sourceName(l.source)}
-          </span>
-        </div>
-        {removed ? (
-          <span
-            title={removedHint(l)}
-            className="absolute bottom-2.5 left-2.5 rounded-full bg-black/70 px-2 py-0.5 text-[11px] font-semibold text-white backdrop-blur-md"
-          >
-            {removedLabel(l, now)}
-          </span>
-        ) : fresh && (
-          <span className="absolute bottom-2.5 left-2.5 rounded-full bg-accent px-2 py-0.5 text-[11px] font-semibold text-accent-fg shadow-sm">
-            New
-          </span>
-        )}
-      </div>
-
-      <div className="flex flex-1 flex-col gap-1.5 p-4">
-        <div className="flex items-baseline justify-between gap-2">
-          <span className="text-[20px] font-semibold tracking-[-0.02em] tabular">{ils(l.price)}</span>
-          {perSqm && <span className="text-[12px] text-muted tabular">{ilsShort(perSqm)}/m²</span>}
-        </div>
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-muted">
-          {facts(l).map((f, i) => (
-            <span key={f} className="inline-flex items-center gap-2">
-              {i > 0 && <span className="size-[3px] rounded-full bg-faint" />}
-              {f}
+      <a
+        href={l.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={`flex h-full flex-col overflow-hidden rounded-2xl border bg-surface outline-none transition-[scale,box-shadow,border-color,opacity] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] group-hover:shadow-[var(--shadow-lift)] focus-visible:ring-2 focus-visible:ring-accent active:scale-[0.99] ${
+          highlighted
+            ? "border-accent shadow-[var(--shadow-lift)] ring-1 ring-accent"
+            : "border-border shadow-[var(--shadow-card)] group-hover:border-border-strong"
+        } ${removed ? "opacity-70 group-hover:opacity-100 focus-visible:opacity-100" : ""}`}
+      >
+        <div className="relative aspect-[16/10] overflow-hidden">
+          {imgOk ? (
+            // Remote images come from many CDNs; a plain img avoids per-host config.
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={l.image!}
+              alt=""
+              loading="lazy"
+              referrerPolicy="no-referrer"
+              onError={() => setImgOk(false)}
+              className={`size-full object-cover transition-transform duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] group-hover:scale-[1.03] ${removed ? "grayscale" : ""}`}
+            />
+          ) : (
+            <div className="blueprint grid size-full place-items-center text-faint">
+              <LogoMark size={34} className="opacity-50" />
+            </div>
+          )}
+          <div className="absolute inset-x-0 top-0 flex items-start justify-between p-2.5">
+            <PriorityBadge p={l.priority} withCity={cityName(l.city)} />
+            <span className="rounded-full bg-black/55 px-2 py-0.5 text-[11px] font-medium text-white backdrop-blur-md">
+              {sourceName(l.source)}
             </span>
-          ))}
-          <PriceDrop l={l} />
+          </div>
+          {removed ? (
+            <span
+              title={removedHint(l)}
+              className="absolute bottom-2.5 left-2.5 rounded-full bg-black/70 px-2 py-0.5 text-[11px] font-semibold text-white backdrop-blur-md"
+            >
+              {removedLabel(l, now)}
+            </span>
+          ) : fresh && (
+            <span className="absolute bottom-2.5 left-2.5 rounded-full bg-accent px-2 py-0.5 text-[11px] font-semibold text-accent-fg shadow-sm">
+              New
+            </span>
+          )}
         </div>
-        {place && (
-          <p dir="auto" className="line-clamp-1 text-[13px] text-fg/80">
-            {place}
-          </p>
-        )}
-        <AmenityList features={l.features} className="pt-0.5" />
-        <div className="mt-auto flex items-center justify-between pt-3 text-[12px] text-faint">
-          <span>
-            {l.postedAt ? `Posted ${relativeTime(l.postedAt, now)}` : `Found ${relativeTime(l.firstSeenAt, now)}`}
-            {l.isAgency === false && <span className="ml-1.5 text-muted">· Private</span>}
-            {l.alsoOn.length > 0 && (
-              <span className="ml-1.5 text-muted">· also on {[...new Set(l.alsoOn.map((a) => sourceName(a.source)))].join(", ")}</span>
-            )}
-          </span>
-          <span className="inline-flex items-center gap-1 font-medium text-muted transition-colors group-hover:text-accent">
-            Open
-            <svg className="size-3 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" viewBox="0 0 12 12" fill="none">
-              <path d="M3.5 8.5 8.5 3.5M4.5 3.5h4v4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </span>
+
+        <div className="flex flex-1 flex-col gap-1.5 p-4">
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="text-[20px] font-semibold tracking-[-0.02em] tabular">{ils(l.price)}</span>
+            {perSqm && <span className="text-[12px] text-muted tabular">{ilsShort(perSqm)}/m²</span>}
+          </div>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-muted">
+            {facts(l).map((f, i) => (
+              <span key={f} className="inline-flex items-center gap-2">
+                {i > 0 && <span className="size-[3px] rounded-full bg-faint" />}
+                {f}
+              </span>
+            ))}
+            <PriceDrop l={l} />
+          </div>
+          {place && (
+            <p dir="auto" className="line-clamp-1 text-[13px] text-fg/80">
+              {place}
+            </p>
+          )}
+          <AmenityList features={l.features} className="pt-0.5" />
+          <div className="mt-auto flex items-center justify-between pt-3 text-[12px] text-faint">
+            <span>
+              {l.postedAt ? `Posted ${relativeTime(l.postedAt, now)}` : `Found ${relativeTime(l.firstSeenAt, now)}`}
+              {l.isAgency === false && <span className="ml-1.5 text-muted">· Private</span>}
+              {l.alsoOn.length > 0 && (
+                <span className="ml-1.5 text-muted">· also on {[...new Set(l.alsoOn.map((a) => sourceName(a.source)))].join(", ")}</span>
+              )}
+            </span>
+            <span className="inline-flex items-center gap-1 font-medium text-muted transition-colors group-hover:text-accent">
+              Open
+              <svg className="size-3 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" viewBox="0 0 12 12" fill="none">
+                <path d="M3.5 8.5 8.5 3.5M4.5 3.5h4v4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </span>
+          </div>
+        </div>
+      </a>
+      {/* Same box as the photo (inside the link's 1px border), so the star sits in its bottom-right corner. */}
+      <div className="pointer-events-none absolute inset-x-px top-px aspect-[16/10]">
+        <div className="pointer-events-auto absolute right-2 bottom-2">
+          <StarButton id={l.id} starred={l.starredAt != null} variant="overlay" />
         </div>
       </div>
-    </a>
+    </div>
   );
 });
 
 export function ListingRow({ l, now }: { l: ListingView; now: number }) {
   const perSqm = l.price && l.sqm ? Math.round(l.price / l.sqm) : null;
   const removed = !!l.removedAt;
+  // The star is the link's sibling (no button inside a link); the wrapper carries the row chrome.
   return (
-    <a
-      href={l.url}
-      target="_blank"
-      rel="noopener noreferrer"
-      className={`group grid grid-cols-[68px_1fr_auto] items-center gap-x-4 gap-y-1 border-b border-border px-4 py-3 transition-[background-color,opacity] duration-150 last:border-b-0 hover:bg-surface-2 md:grid-cols-[68px_130px_150px_1fr_110px_90px_20px] ${
-        removed ? "opacity-70 hover:opacity-100 focus-visible:opacity-100" : ""
-      }`}
-    >
-      <PriorityBadge p={l.priority} size="sm" />
-      <span className="text-[15px] font-semibold tracking-[-0.01em] tabular md:order-none">{ils(l.price)}</span>
-      {removed && (
-        <span title={removedHint(l)} className="whitespace-nowrap rounded-full bg-surface-2 px-2 py-0.5 text-[11px] font-medium text-muted md:hidden">
-          {removedLabel(l, now)}
+    <div className="group flex items-center border-b border-border transition-colors duration-150 last:border-b-0 hover:bg-surface-2">
+      <a
+        href={l.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={`grid min-w-0 flex-1 grid-cols-[68px_1fr_auto] items-center gap-x-4 gap-y-1 py-3 pr-2 pl-4 outline-none transition-opacity duration-150 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent md:grid-cols-[68px_130px_150px_1fr_110px_90px_20px] ${
+          removed ? "opacity-70 group-hover:opacity-100 focus-visible:opacity-100" : ""
+        }`}
+      >
+        <PriorityBadge p={l.priority} size="sm" />
+        <span className="text-[15px] font-semibold tracking-[-0.01em] tabular md:order-none">{ils(l.price)}</span>
+        {removed && (
+          <span title={removedHint(l)} className="whitespace-nowrap rounded-full bg-surface-2 px-2 py-0.5 text-[11px] font-medium text-muted md:hidden">
+            {removedLabel(l, now)}
+          </span>
+        )}
+        <span className="hidden text-[13px] text-muted tabular md:block">
+          {[l.rooms != null ? `${l.rooms} r` : null, l.sqm ? `${l.sqm} m²` : null, perSqm ? `${ilsShort(perSqm)}/m²` : null]
+            .filter(Boolean)
+            .join(" · ")}
         </span>
-      )}
-      <span className="hidden text-[13px] text-muted tabular md:block">
-        {[l.rooms != null ? `${l.rooms} r` : null, l.sqm ? `${l.sqm} m²` : null, perSqm ? `${ilsShort(perSqm)}/m²` : null]
-          .filter(Boolean)
-          .join(" · ")}
-      </span>
-      <div className="col-span-3 flex min-w-0 items-center gap-3 md:col-span-1">
-        <span className="line-clamp-1 min-w-0 flex-1 text-[13px] text-fg/80">
-          <span className="font-medium text-fg">{cityName(l.city)}</span>
-          {placeLine(l) && (
-            <span className="text-muted">
-              {" · "}
-              <bdi>{placeLine(l)}</bdi>
-            </span>
-          )}
-        </span>
-        <AmenityList features={l.features} compact className="shrink-0 max-md:hidden" />
-      </div>
-      <span className="hidden text-[12px] text-muted md:block">{sourceName(l.source)}</span>
-      {removed ? (
-        <span className="hidden text-[12px] leading-tight text-faint md:block" title={removedHint(l)}>
-          <span className="block font-medium text-muted">{l.source === "madlan" ? "Likely removed" : "Removed"}</span>
-          {relativeTime(l.removedAt, now)}
-        </span>
-      ) : (
-        <span className="hidden text-[12px] text-faint md:block">{relativeTime(l.postedAt ?? l.firstSeenAt, now)}</span>
-      )}
-      <svg className="hidden size-3.5 text-faint transition-colors group-hover:text-accent md:block" viewBox="0 0 12 12" fill="none">
-        <path d="M3.5 8.5 8.5 3.5M4.5 3.5h4v4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    </a>
+        <div className="col-span-3 flex min-w-0 items-center gap-3 md:col-span-1">
+          <span className="line-clamp-1 min-w-0 flex-1 text-[13px] text-fg/80">
+            <span className="font-medium text-fg">{cityName(l.city)}</span>
+            {placeLine(l) && (
+              <span className="text-muted">
+                {" · "}
+                <bdi>{placeLine(l)}</bdi>
+              </span>
+            )}
+          </span>
+          <AmenityList features={l.features} compact className="shrink-0 max-md:hidden" />
+        </div>
+        <span className="hidden text-[12px] text-muted md:block">{sourceName(l.source)}</span>
+        {removed ? (
+          <span className="hidden text-[12px] leading-tight text-faint md:block" title={removedHint(l)}>
+            <span className="block font-medium text-muted">{l.source === "madlan" ? "Likely removed" : "Removed"}</span>
+            {relativeTime(l.removedAt, now)}
+          </span>
+        ) : (
+          <span className="hidden text-[12px] text-faint md:block">{relativeTime(l.postedAt ?? l.firstSeenAt, now)}</span>
+        )}
+        <svg className="hidden size-3.5 text-faint transition-colors group-hover:text-accent md:block" viewBox="0 0 12 12" fill="none">
+          <path d="M3.5 8.5 8.5 3.5M4.5 3.5h4v4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </a>
+      <StarButton id={l.id} starred={l.starredAt != null} className="mr-2" />
+    </div>
   );
 }

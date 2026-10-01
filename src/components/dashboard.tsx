@@ -21,6 +21,7 @@ import { ilsShort, isFresh, relativeTime } from "@/lib/format";
 import { AddCityButton } from "./add-city";
 import { AMENITIES, AmenityIcon, amenityTitle } from "./amenities";
 import { buildHistogram, Chip, RangeSlider, Segmented, Select, Toggle, ToggleGroup } from "./controls";
+import { StarredFilter, useStarredListings } from "./favorites";
 import { ListingCard, ListingRow } from "./listing-card";
 import { Logo } from "./logo";
 import { SubscribeForm } from "./subscribe-form";
@@ -47,7 +48,8 @@ type Sort =
   | "size-asc"
   | "floor-asc"
   | "floor-desc"
-  | "drop";
+  | "drop"
+  | "starred";
 
 const SORTS: { value: Sort; label: string }[] = [
   { value: "priority", label: "Priority" },
@@ -60,6 +62,7 @@ const SORTS: { value: Sort; label: string }[] = [
   { value: "floor-asc", label: "Floor ↑" },
   { value: "floor-desc", label: "Floor ↓" },
   { value: "drop", label: "Biggest price drop" },
+  { value: "starred", label: "Starred first" },
 ];
 
 const postedTime = (l: ListingView) => new Date(l.postedAt ?? l.firstSeenAt).getTime();
@@ -99,6 +102,8 @@ function sortListings(list: ListingView[], sort: Sort) {
       return sorted.sort(by((l) => l.floor, -1));
     case "drop":
       return sorted.sort(by(dropOf, -1));
+    case "starred": // most recently starred first, then the rest by priority
+      return sorted.sort((a, b) => (b.starredAt ?? "").localeCompare(a.starredAt ?? "") || a.priority - b.priority || byNewest(a, b));
   }
 }
 
@@ -146,13 +151,15 @@ type Filters = {
   posted: Posted;
   /** Every selected amenity must be stated by the listing (unknown counts as no). */
   amenities: FeatureKey[];
+  /** Only listings the owner starred. */
+  starred: boolean;
 } & Record<RangeKey, Range | null> & // null = full extent
   Record<FlagKey, boolean>;
 
 const flagsOff = Object.fromEntries(FLAG_KEYS.map((k) => [k, false])) as Record<FlagKey, boolean>;
 /** Everything behind "More filters" on desktop. */
 const ADVANCED_OFF = { price: null, sqm: null, floor: null, ppsqm: null, types: [], posted: 0, amenities: [], ...flagsOff } satisfies Partial<Filters>;
-const NO_FILTERS: Filters = { priority: 0, cities: [], source: "all", rooms: [], ...ADVANCED_OFF };
+const NO_FILTERS: Filters = { priority: 0, cities: [], source: "all", rooms: [], starred: false, ...ADVANCED_OFF };
 
 const ROOMS = [4, 4.5, 5];
 
@@ -182,7 +189,7 @@ function countAdvanced(f: Filters) {
 }
 /** Active filters, excluding the search text. */
 function countFilters(f: Filters) {
-  return (f.priority ? 1 : 0) + f.cities.length + (f.source !== "all" ? 1 : 0) + f.rooms.length + countAdvanced(f);
+  return (f.priority ? 1 : 0) + f.cities.length + (f.source !== "all" ? 1 : 0) + f.rooms.length + (f.starred ? 1 : 0) + countAdvanced(f);
 }
 
 const quantile = (sorted: number[], q: number) => sorted[Math.round(q * (sorted.length - 1))];
@@ -203,6 +210,7 @@ const inRange = (v: number | null, r: Range, b: Bounds) =>
 /** Returns a predicate; `skip` ignores one filter (used to draw each slider's histogram against the other filters). */
 function buildMatcher(f: Filters, q: string, now: number, bounds: Record<RangeKey, Bounds>) {
   const tests: [string, (l: ListingView) => boolean][] = [];
+  if (f.starred) tests.push(["starred", (l) => l.starredAt != null]);
   if (f.priority) tests.push(["priority", (l) => l.priority === f.priority]);
   if (f.cities.length) tests.push(["cities", (l) => f.cities.includes(l.city)]);
   if (f.source !== "all") tests.push(["source", (l) => l.source === f.source]);
@@ -235,7 +243,7 @@ type View = "grid" | "list" | "map";
 type Scope = "active" | "removed";
 
 export function Dashboard({
-  listings: all,
+  listings: serverListings,
   status,
   cities,
   passcodeRequired,
@@ -247,6 +255,8 @@ export function Dashboard({
   passcodeRequired: boolean;
   now: number;
 }) {
+  // Stars being saved show right away (rolled back if the save fails).
+  const all = useStarredListings(serverListings);
   // Everything below (results, counts, stats, map) works on the chosen scope only.
   const [scope, setScope] = useState<Scope>("active");
   const removedCount = useMemo(() => all.filter((l) => l.removedAt).length, [all]);
@@ -331,13 +341,15 @@ export function Dashboard({
     const cities = new Map<string, number>();
     const rooms = new Map<number, number>();
     const types = new Map<string, number>();
+    let starred = 0;
     for (const l of listings) {
+      if (l.starredAt) starred++;
       cities.set(l.city, (cities.get(l.city) ?? 0) + 1);
       if (l.rooms != null) rooms.set(l.rooms, (rooms.get(l.rooms) ?? 0) + 1);
       const t = typeOf(l);
       if (t) types.set(t, (types.get(t) ?? 0) + 1);
     }
-    return { cities, rooms, types: [...types].sort((a, b) => b[1] - a[1]) };
+    return { cities, rooms, starred, types: [...types].sort((a, b) => b[1] - a[1]) };
   }, [listings]);
 
   const toggleIn = <T,>(list: T[], v: T) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
@@ -564,6 +576,7 @@ export function Dashboard({
 
             <div className="mt-2.5 flex flex-wrap items-center gap-2">
               <SearchField value={query} onChange={onQuery} placeholder="Street or neighborhood" className="w-56 shrink-0" />
+              <StarredFilter on={filters.starred} count={counts.starred} onChange={(starred) => update({ starred })} />
               <ToggleGroup
                 label="Rooms"
                 values={filters.rooms}
@@ -695,6 +708,9 @@ export function Dashboard({
           </div>
         }
       >
+        <FilterSection>
+          <StarredFilter full on={filters.starred} count={counts.starred} onChange={(starred) => update({ starred })} />
+        </FilterSection>
         <FilterSection title="Priority">
           <Segmented id="priority-sheet" full label="Priority" value={filters.priority} onChange={(v) => update({ priority: v })} options={priorityOptions} />
         </FilterSection>
