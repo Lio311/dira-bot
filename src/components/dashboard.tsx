@@ -524,7 +524,7 @@ export function Dashboard({ listings, status, now }: { listings: ListingView[]; 
                 {advanced("pop", false)}
               </MoreFilters>
               <div className="ml-auto flex shrink-0 items-center gap-2 pl-2">
-                <Select label="Sort" value={sort} onChange={setSort} options={SORTS} />
+                <Select label="Sort" value={sort} onChange={setSort} options={SORTS} align="end" />
                 <Segmented id="view" label="View" value={view} onChange={setView} options={viewOptions} />
               </div>
             </div>
