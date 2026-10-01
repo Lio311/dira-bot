@@ -2,6 +2,7 @@ import "server-only";
 import { and, desc, gt, isNotNull, isNull, sql } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import { listings, scrapeRuns } from "@/db/schema";
+import { usableImage } from "@/lib/images";
 
 export interface ListingView {
   id: number;
@@ -85,7 +86,7 @@ export async function getDashboardData() {
       price: l.price,
       lat: l.lat,
       lng: l.lng,
-      image: l.images[0] ?? null,
+      image: l.images.map((i) => usableImage(i)).find(Boolean) ?? null,
       isAgency: l.isAgency,
       postedAt: l.postedAt?.toISOString() ?? null,
       firstSeenAt: l.firstSeenAt.toISOString(),
