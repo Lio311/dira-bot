@@ -256,6 +256,14 @@ function closeSilently(open: OpenPopup | null) {
 /* Component                                                           */
 /* ------------------------------------------------------------------ */
 
+function fitTo(map: MapLibreMap, bounds: LngLatBounds, animate: boolean) {
+  const { clientWidth: w, clientHeight: hgt } = map.getContainer();
+  if (!w || !hgt) return;
+  // Small containers can't afford the full padding (MapLibre warns and bails).
+  const padding = Math.max(8, Math.min(FIT_PADDING, Math.floor(Math.min(w, hgt) / 5)));
+  map.fitBounds(bounds, { padding, maxZoom: FIT_MAX_ZOOM, ...(animate ? { duration: 600 } : { animate: false }) });
+}
+
 export default function ListingsMap({ listings, hoveredId, selectedId, onHover, onSelect }: ListingsMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   // Created asynchronously (after the worker is prepared), hence state.
@@ -266,6 +274,9 @@ export default function ListingsMap({ listings, hoveredId, selectedId, onHover, 
   const popupRef = useRef<OpenPopup | null>(null);
   const fitKeyRef = useRef<string | null>(null);
   const hasFitRef = useRef(false);
+  // Last fitted bounds, refitted when the container resizes until the user moves the map.
+  const boundsRef = useRef<LngLatBounds | null>(null);
+  const userMovedRef = useRef(false);
 
   // Marker/map listeners are attached once; read callbacks through refs so they never go stale.
   const onHoverRef = useRef(onHover);
@@ -422,16 +433,35 @@ export default function ListingsMap({ listings, hoveredId, selectedId, onHover, 
 
     const bounds = new LngLatBounds();
     for (const l of located) bounds.extend([l.lng, l.lat]);
-    const { clientWidth: w, clientHeight: hgt } = map.getContainer();
-    // Small containers can't afford the full padding (MapLibre warns and bails).
-    const padding = Math.max(8, Math.min(FIT_PADDING, Math.floor(Math.min(w, hgt) / 5)));
-    map.fitBounds(bounds, {
-      padding,
-      maxZoom: FIT_MAX_ZOOM,
-      ...(hasFitRef.current ? { duration: 600 } : { animate: false }),
-    });
+    boundsRef.current = bounds;
+    userMovedRef.current = false;
+    fitTo(map, bounds, hasFitRef.current);
     hasFitRef.current = true;
   }, [map, idsKey, located]);
+
+  // The sticky panel's height settles after first paint (it depends on the measured filter
+  // bar), so refit on container resizes until the user pans or zooms on their own.
+  useEffect(() => {
+    if (!map) return;
+    const onMoveStart = (e: { originalEvent?: unknown }) => {
+      if (e.originalEvent) userMovedRef.current = true;
+    };
+    map.on("movestart", onMoveStart);
+    let frame = 0;
+    const ro = new ResizeObserver(() => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        map.resize();
+        if (!userMovedRef.current && boundsRef.current) fitTo(map, boundsRef.current, false);
+      });
+    });
+    ro.observe(map.getContainer());
+    return () => {
+      cancelAnimationFrame(frame);
+      ro.disconnect();
+      map.off("movestart", onMoveStart);
+    };
+  }, [map]);
 
   // Popup for the selected listing.
   useEffect(() => {
