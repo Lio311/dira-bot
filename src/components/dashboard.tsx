@@ -587,7 +587,7 @@ export function Dashboard({
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-[1320px] flex-1 px-4 pb-24 sm:px-6">
+      <main className="mx-auto w-full max-w-[1320px] flex-1 px-4 pb-4 sm:px-6">
         <section className="pt-10 pb-8 sm:pt-14">
           <h1 className="max-w-2xl text-[32px] font-semibold leading-[1.1] tracking-[-0.035em] text-balance sm:text-[40px]">
             Every 4–5 room flat between ₪2M and ₪4.5M, <span className="text-muted">in one place.</span>
@@ -740,13 +740,6 @@ export function Dashboard({
         )}
         </div>
       </main>
-
-      <footer className="border-t border-border">
-        <div className="mx-auto flex max-w-[1320px] items-center justify-between px-4 py-6 text-[12px] text-faint sm:px-6">
-          <span>diraBot · runs every 8 hours</span>
-          <span>Last update {relativeTime(lastRun, now)}</span>
-        </div>
-      </footer>
 
       {/* Outside the sticky bar: its backdrop-filter would otherwise become the containing block for `position: fixed`. */}
       <BottomSheet
