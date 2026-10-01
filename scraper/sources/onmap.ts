@@ -139,21 +139,11 @@ async function fetchPage(cityName: string, skip: number) {
 }
 
 /**
- * OnMap opens a listing's panel only when the search path carries a map box:
- * `/search/homes/buy/c_<sw-lat>,<sw-lng>/t_<ne-lat>,<ne-lng>/z_15?property=<slug>`.
- * A bare `?property=`, a city slug alone, or a single center point all land on the
- * search map with no listing open (checked against the live site).
+ * Each listing has a standalone page (listed in OnMap's sale sitemap). Links into the
+ * search map (`/search/homes/buy/...?property=`) open the listing and then close it as
+ * soon as the map refits to the viewer's window, so they don't work reliably.
  */
-function listingUrl(i: OnmapItem) {
-  const loc = i.address?.location;
-  if (loc?.lat != null && loc?.lon != null) {
-    const d = 0.004;
-    const box = `c_${(loc.lat - d).toFixed(6)},${(loc.lon - d).toFixed(6)}/t_${(loc.lat + d).toFixed(6)},${(loc.lon + d).toFixed(6)}`;
-    return `https://www.onmap.co.il/search/homes/buy/${box}/z_15?property=${i.slug}`;
-  }
-  const city = (i.address?.en?.city_name ?? "").toLowerCase().replace(/['’]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-  return `https://www.onmap.co.il/search/homes/buy${city ? `/${city}` : ""}?property=${i.slug}`;
-}
+const listingUrl = (i: OnmapItem) => `https://www.onmap.co.il/home-details/${i.slug}`;
 
 export const onmap: Source = {
   key: "onmap",
