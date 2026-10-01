@@ -31,7 +31,7 @@ export function SubscribeForm() {
           <h2 id="subscribe-title" className="text-[14px] font-semibold tracking-[-0.01em]">
             Get alerts by email
           </h2>
-          <p className="mt-0.5 text-[13px] leading-snug text-muted">New listings and price drops after each run. Unsubscribe in one click.</p>
+          <p className="mt-0.5 text-[13px] leading-snug text-muted">New listings and price changes after each run. Unsubscribe in one click.</p>
         </div>
       </div>
       <SubscribeBody key={round} onReset={() => setRound((r) => r + 1)} />
