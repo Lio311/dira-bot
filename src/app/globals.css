@@ -23,6 +23,9 @@
   --p4-soft: #efede9;
 
   --drop: #0b6b3a;
+  --drop-soft: #e3f3ea;
+  --rise: #b45309;
+  --rise-soft: #fcefdf;
   --danger: #c4261d;
   /* Favorites: gold fill, darker edge so the star holds up on white. */
   --star: #f5ad0a;
@@ -56,6 +59,9 @@
     --p4-soft: #22211f;
 
     --drop: #5fd49a;
+    --drop-soft: #11271b;
+    --rise: #f2a65a;
+    --rise-soft: #2d1d0d;
     --danger: #f87171;
     --star: #fbbf24;
     --star-edge: #fbbf24;

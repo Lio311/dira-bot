@@ -11,6 +11,7 @@ import {
   index,
   boolean,
 } from "drizzle-orm/pg-core";
+import type { PriceEntry } from "../lib/price-history";
 
 export const FEATURE_KEYS = ["parking", "elevator", "balcony", "safeRoom", "airConditioning", "storage", "accessible", "renovated"] as const;
 export type FeatureKey = (typeof FEATURE_KEYS)[number];
@@ -43,7 +44,8 @@ export const listings = pgTable(
     postedAt: timestamp("posted_at", { withTimezone: true }),
     firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).notNull().defaultNow(),
     lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
-    priceHistory: jsonb("price_history").$type<{ price: number; at: string }[]>().notNull().default([]),
+    /** Known asking prices, oldest first: our own readings plus what the site reports (see PriceEntry). */
+    priceHistory: jsonb("price_history").$type<PriceEntry[]>().notNull().default([]),
     notifiedAt: timestamp("notified_at", { withTimezone: true }),
     /** Amenities from the source (parking, elevator, balcony, safeRoom, …); absent key = unknown. */
     features: jsonb("features").$type<Partial<Record<FeatureKey, boolean>>>().notNull().default({}),

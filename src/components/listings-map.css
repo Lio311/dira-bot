@@ -254,6 +254,22 @@
   font-variant-numeric: tabular-nums;
 }
 
+.lm-card-was {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.lm-card-was-delta {
+  font-weight: 600;
+}
+.lm-card-was[data-dir="down"] .lm-card-was-delta {
+  color: var(--drop);
+}
+.lm-card-was[data-dir="up"] .lm-card-was-delta {
+  color: var(--rise);
+}
+
 .lm-card-facts {
   margin-top: 2px;
   color: var(--muted);

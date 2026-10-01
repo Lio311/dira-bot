@@ -49,7 +49,8 @@ type Sort =
   | "floor-asc"
   | "floor-desc"
   | "drop"
-  | "starred";
+  | "starred"
+  | "changed";
 
 const SORTS: { value: Sort; label: string }[] = [
   { value: "priority", label: "Priority" },
@@ -63,10 +64,14 @@ const SORTS: { value: Sort; label: string }[] = [
   { value: "floor-desc", label: "Floor ↓" },
   { value: "drop", label: "Biggest price drop" },
   { value: "starred", label: "Starred first" },
+  { value: "changed", label: "Recently changed" },
 ];
 
 const postedTime = (l: ListingView) => new Date(l.postedAt ?? l.firstSeenAt).getTime();
-const dropOf = (l: ListingView) => (l.previousPrice && l.price && l.price < l.previousPrice ? l.previousPrice - l.price : null);
+/** Total drop vs the first known price. */
+const dropOf = (l: ListingView) => (l.priceChange != null && l.priceChange < 0 ? -l.priceChange : null);
+/** Latest change first; changes with no known date (a site's undated "price before") after dated ones. */
+const changedOf = (l: ListingView) => (l.priceChangedAt ? new Date(l.priceChangedAt).getTime() : l.priceChange != null ? 0 : null);
 const perSqmOf = (l: ListingView) => (l.price && l.sqm ? l.price / l.sqm : null);
 
 function sortListings(list: ListingView[], sort: Sort) {
@@ -104,6 +109,8 @@ function sortListings(list: ListingView[], sort: Sort) {
       return sorted.sort(by(dropOf, -1));
     case "starred": // most recently starred first, then the rest by priority
       return sorted.sort((a, b) => (b.starredAt ?? "").localeCompare(a.starredAt ?? "") || a.priority - b.priority || byNewest(a, b));
+    case "changed":
+      return sorted.sort(by(changedOf, -1));
   }
 }
 
@@ -132,7 +139,6 @@ const RANGES: {
 /** Boolean filters: add an entry and it gets a toggle, a filter test and a place in the active count. */
 const FLAGS = {
   withPhotos: { label: "With photos", test: (l: ListingView) => !!l.image },
-  priceDropped: { label: "Price dropped", test: (l: ListingView) => dropOf(l) != null },
   onlyNew: { label: "New in 24h", test: (l: ListingView, now: number) => isFresh(l.firstSeenAt, 24, now) },
   onlyPrivate: { label: "No agents", test: (l: ListingView) => l.isAgency === false },
 } satisfies Record<string, { label: string; test: (l: ListingView, now: number) => boolean }>;
@@ -142,6 +148,10 @@ const FLAG_KEYS = Object.keys(FLAGS) as FlagKey[];
 /** Posted within N days (0 = any time). */
 type Posted = 0 | 1 | 3 | 7 | 30;
 
+/** Price changed vs the first known price. */
+type PriceMove = "any" | "down" | "up";
+const movedOf = (l: ListingView): PriceMove | null => (l.priceChange == null || l.priceChange === 0 ? null : l.priceChange < 0 ? "down" : "up");
+
 type Filters = {
   priority: number; // 0 = all
   cities: string[];
@@ -149,6 +159,7 @@ type Filters = {
   rooms: number[];
   types: string[];
   posted: Posted;
+  priceMove: PriceMove;
   /** Every selected amenity must be stated by the listing (unknown counts as no). */
   amenities: FeatureKey[];
   /** Only listings the owner starred. */
@@ -158,7 +169,7 @@ type Filters = {
 
 const flagsOff = Object.fromEntries(FLAG_KEYS.map((k) => [k, false])) as Record<FlagKey, boolean>;
 /** Everything behind "More filters" on desktop. */
-const ADVANCED_OFF = { price: null, sqm: null, floor: null, ppsqm: null, types: [], posted: 0, amenities: [], ...flagsOff } satisfies Partial<Filters>;
+const ADVANCED_OFF = { price: null, sqm: null, floor: null, ppsqm: null, types: [], posted: 0, priceMove: "any", amenities: [], ...flagsOff } satisfies Partial<Filters>;
 const NO_FILTERS: Filters = { priority: 0, cities: [], source: "all", rooms: [], starred: false, ...ADVANCED_OFF };
 
 const ROOMS = [4, 4.5, 5];
@@ -183,6 +194,7 @@ function countAdvanced(f: Filters) {
     RANGES.filter((d) => f[d.key]).length +
     f.types.length +
     (f.posted ? 1 : 0) +
+    (f.priceMove !== "any" ? 1 : 0) +
     f.amenities.length +
     FLAG_KEYS.filter((k) => f[k]).length
   );
@@ -221,6 +233,7 @@ function buildMatcher(f: Filters, q: string, now: number, bounds: Record<RangeKe
     if (r) tests.push([d.key, (l) => inRange(d.get(l), r, bounds[d.key])]);
   }
   if (f.posted) tests.push(["posted", (l) => now - postedTime(l) < f.posted * 86_400_000]);
+  if (f.priceMove !== "any") tests.push(["priceMove", (l) => movedOf(l) === f.priceMove]);
   if (f.amenities.length) tests.push(["amenities", (l) => f.amenities.every((k) => l.features[k] === true)]);
   for (const k of FLAG_KEYS) if (f[k]) tests.push([k, (l) => FLAGS[k].test(l, now)]);
   if (q) tests.push(["q", (l) => [l.street, l.neighborhood, l.title, l.description].some((x) => x?.toLowerCase().includes(q))]);
@@ -332,9 +345,9 @@ export function Dashboard({
 
   const stats = useMemo(() => {
     const fresh = listings.filter((l) => isFresh(l.removedAt ?? l.firstSeenAt, 24, now)).length;
-    const drops = listings.filter((l) => l.previousPrice && l.price && l.price < l.previousPrice).length;
+    const changedThisWeek = listings.filter((l) => l.priceChangedAt && now - new Date(l.priceChangedAt).getTime() < 7 * 86_400_000).length;
     const perSqm = median(filtered.filter((l) => l.price && l.sqm).map((l) => l.price! / l.sqm!));
-    return { fresh, drops, perSqm, medianPrice: median(filtered.flatMap((l) => (l.price ? [l.price] : []))) };
+    return { fresh, changedThisWeek, perSqm, medianPrice: median(filtered.flatMap((l) => (l.price ? [l.price] : []))) };
   }, [listings, filtered, now]);
 
   const counts = useMemo(() => {
@@ -342,14 +355,17 @@ export function Dashboard({
     const rooms = new Map<number, number>();
     const types = new Map<string, number>();
     let starred = 0;
+    const moves: Record<PriceMove, number> = { any: listings.length, down: 0, up: 0 };
     for (const l of listings) {
       if (l.starredAt) starred++;
+      const m = movedOf(l);
+      if (m) moves[m]++;
       cities.set(l.city, (cities.get(l.city) ?? 0) + 1);
       if (l.rooms != null) rooms.set(l.rooms, (rooms.get(l.rooms) ?? 0) + 1);
       const t = typeOf(l);
       if (t) types.set(t, (types.get(t) ?? 0) + 1);
     }
-    return { cities, rooms, starred, types: [...types].sort((a, b) => b[1] - a[1]) };
+    return { cities, rooms, starred, moves, types: [...types].sort((a, b) => b[1] - a[1]) };
   }, [listings]);
 
   const toggleIn = <T,>(list: T[], v: T) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
@@ -501,6 +517,30 @@ export function Dashboard({
           ]}
         />
       </FilterSection>
+      <FilterSection title="Price changed">
+        <Segmented
+          id={`${idPrefix}-price-move`}
+          full
+          label="Price changed"
+          value={filters.priceMove}
+          onChange={(v) => update({ priceMove: v })}
+          options={(
+            [
+              ["any", "Any"],
+              ["down", "Dropped"],
+              ["up", "Increased"],
+            ] as const
+          ).map(([value, label]) => ({
+            value,
+            label: (
+              <>
+                {label}
+                {value !== "any" && <span className="ml-1 tabular opacity-60">{counts.moves[value]}</span>}
+              </>
+            ),
+          }))}
+        />
+      </FilterSection>
       <FilterSection title="Amenities">
         <div className="flex flex-wrap gap-2">
           {AMENITIES.map((a) => (
@@ -623,7 +663,19 @@ export function Dashboard({
             )}
             <span className="tabular">
               <span className="font-medium text-fg">{filtered.length.toLocaleString("en-US")}</span> {scope === "removed" ? "taken down" : `listing${filtered.length === 1 ? "" : "s"}`}
-              {stats.drops > 0 && scope === "active" && <span> · {stats.drops} price drops</span>}
+              {stats.changedThisWeek > 0 && scope === "active" && (
+                <>
+                  {" · "}
+                  <button
+                    type="button"
+                    onClick={() => setSort("changed")}
+                    title="Sort by recently changed"
+                    className="underline-offset-4 transition-[color,scale] duration-150 hover:text-fg hover:underline active:scale-[0.97]"
+                  >
+                    {plural(stats.changedThisWeek, "price change")} this week
+                  </button>
+                </>
+              )}
             </span>
           </div>
           <AnimatePresence>

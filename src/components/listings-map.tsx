@@ -19,6 +19,7 @@ import { cityName, SOURCES, type SourceKey } from "@/lib/config";
 import type { ListingView } from "@/lib/data";
 import { ils, ilsShort } from "@/lib/format";
 import { STAR_PATH, useStarToggle } from "./favorites";
+import { priceChangeHint } from "./price-history";
 
 export interface ListingsMapProps {
   listings: ListingView[]; // the currently filtered listings (some have lat/lng null)
@@ -255,6 +256,17 @@ function buildPopupContent(
   priceRow.append(h("span", "lm-card-price", ils(l.price)));
   if (l.price && l.sqm) priceRow.append(h("span", "lm-card-per-sqm", `${ilsShort(Math.round(l.price / l.sqm))}/m²`));
   body.append(priceRow);
+
+  // "↓ ₪120K · Was ₪3.9M · changed 3d ago"
+  const hint = priceChangeHint(l, Date.now());
+  if (hint && l.priceChange != null) {
+    const dir = l.priceChange < 0 ? "down" : l.priceChange > 0 ? "up" : "flat";
+    const was = h("div", "lm-card-was");
+    was.dataset.dir = dir;
+    const delta = h("span", "lm-card-was-delta", `${dir === "down" ? "↓" : dir === "up" ? "↑" : "↔"} ${ilsShort(Math.abs(l.priceChange))}`);
+    was.append(delta, document.createTextNode(` · ${hint}`));
+    body.append(was);
+  }
 
   const facts = factsOf(l);
   if (facts.length) body.append(h("div", "lm-card-facts", facts.join(" · ")));

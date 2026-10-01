@@ -7,6 +7,7 @@ import { ils, ilsShort, isFresh, relativeTime } from "@/lib/format";
 import { AmenityList } from "./amenities";
 import { StarButton } from "./favorites";
 import { LogoMark } from "./logo";
+import { PriceChangeBadge } from "./price-history";
 
 export const priorityVars = (p: number) => ({
   color: `var(--p${p})`,
@@ -49,15 +50,6 @@ function removedLabel(l: ListingView, now: number) {
 const removedHint = (l: ListingView) =>
   l.source === "madlan" ? "Not seen on Madlan for 3+ weeks" : `The ad's page on ${sourceName(l.source)} says it was taken down`;
 
-function PriceDrop({ l }: { l: ListingView }) {
-  if (!l.previousPrice || !l.price || l.price >= l.previousPrice) return null;
-  return (
-    <span className="inline-flex items-center gap-0.5 rounded-md bg-[var(--p1-soft)] px-1.5 py-0.5 text-[11px] font-semibold text-[var(--drop)] tabular">
-      ↓ {ilsShort(l.previousPrice - l.price)}
-    </span>
-  );
-}
-
 /** Memoized: the grid re-renders on every hover/filter tick, cards only when their own props change. */
 export const ListingCard = memo(function ListingCard({
   l,
@@ -78,7 +70,7 @@ export const ListingCard = memo(function ListingCard({
   const fresh = isFresh(l.firstSeenAt, 24, now);
   const removed = !!l.removedAt;
 
-  // The wrapper owns hover and lift so the star (a sibling: a button can't live inside the link) moves with the card.
+  // The wrapper owns hover and lift so the buttons over the photo (siblings: a button can't live inside the link) move with the card.
   return (
     <div
       onMouseEnter={onHover && (() => onHover(l.id))}
@@ -144,7 +136,6 @@ export const ListingCard = memo(function ListingCard({
                 {f}
               </span>
             ))}
-            <PriceDrop l={l} />
           </div>
           {place && (
             <p dir="auto" className="line-clamp-1 text-[13px] text-fg/80">
@@ -169,9 +160,10 @@ export const ListingCard = memo(function ListingCard({
           </div>
         </div>
       </a>
-      {/* Same box as the photo (inside the link's 1px border), so the star sits in its bottom-right corner. */}
+      {/* Same box as the photo (inside the link's 1px border), so the price badge and star sit in its bottom-right corner. */}
       <div className="pointer-events-none absolute inset-x-px top-px aspect-[16/10]">
-        <div className="pointer-events-auto absolute right-2 bottom-2">
+        <div className="pointer-events-auto absolute right-2 bottom-2 flex items-center gap-1.5">
+          <PriceChangeBadge l={l} now={now} />
           <StarButton id={l.id} starred={l.starredAt != null} variant="overlay" />
         </div>
       </div>
@@ -182,21 +174,22 @@ export const ListingCard = memo(function ListingCard({
 export function ListingRow({ l, now }: { l: ListingView; now: number }) {
   const perSqm = l.price && l.sqm ? Math.round(l.price / l.sqm) : null;
   const removed = !!l.removedAt;
-  // The star is the link's sibling (no button inside a link); the wrapper carries the row chrome.
+  // No button inside a link: the star is the link's sibling, and the link is stretched over the grid (last child,
+  // above the text) so the price badge can be a button in the price cell. Bits with hover titles sit above it too.
   return (
     <div className="group flex items-center border-b border-border transition-colors duration-150 last:border-b-0 hover:bg-surface-2">
-      <a
-        href={l.url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className={`grid min-w-0 flex-1 grid-cols-[68px_1fr_auto] items-center gap-x-4 gap-y-1 py-3 pr-2 pl-4 outline-none transition-opacity duration-150 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent md:grid-cols-[68px_130px_150px_1fr_110px_90px_20px] ${
-          removed ? "opacity-70 group-hover:opacity-100 focus-visible:opacity-100" : ""
+      <div
+        className={`relative grid min-w-0 flex-1 grid-cols-[68px_1fr_auto] items-center gap-x-4 gap-y-1 py-3 pr-2 pl-4 transition-opacity duration-150 md:grid-cols-[68px_130px_150px_1fr_110px_90px_20px] lg:grid-cols-[68px_190px_150px_1fr_110px_90px_20px] ${
+          removed ? "opacity-70 focus-within:opacity-100 group-hover:opacity-100" : ""
         }`}
       >
         <PriorityBadge p={l.priority} size="sm" />
-        <span className="text-[15px] font-semibold tracking-[-0.01em] tabular md:order-none">{ils(l.price)}</span>
+        <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+          <span className="text-[15px] font-semibold tracking-[-0.01em] tabular">{ils(l.price)}</span>
+          <PriceChangeBadge l={l} now={now} size="sm" className="relative z-[2]" />
+        </span>
         {removed && (
-          <span title={removedHint(l)} className="whitespace-nowrap rounded-full bg-surface-2 px-2 py-0.5 text-[11px] font-medium text-muted md:hidden">
+          <span title={removedHint(l)} className="relative z-[2] whitespace-nowrap rounded-full bg-surface-2 px-2 py-0.5 text-[11px] font-medium text-muted md:hidden">
             {removedLabel(l, now)}
           </span>
         )}
@@ -215,21 +208,28 @@ export function ListingRow({ l, now }: { l: ListingView; now: number }) {
               </span>
             )}
           </span>
-          <AmenityList features={l.features} compact className="shrink-0 max-md:hidden" />
+          <AmenityList features={l.features} compact className="relative z-[2] shrink-0 max-md:hidden" />
         </div>
         <span className="hidden text-[12px] text-muted md:block">{sourceName(l.source)}</span>
         {removed ? (
-          <span className="hidden text-[12px] leading-tight text-faint md:block" title={removedHint(l)}>
+          <span className="relative z-[2] hidden text-[12px] leading-tight text-faint md:block" title={removedHint(l)}>
             <span className="block font-medium text-muted">{l.source === "madlan" ? "Likely removed" : "Removed"}</span>
             {relativeTime(l.removedAt, now)}
           </span>
         ) : (
           <span className="hidden text-[12px] text-faint md:block">{relativeTime(l.postedAt ?? l.firstSeenAt, now)}</span>
         )}
-        <svg className="hidden size-3.5 text-faint transition-colors group-hover:text-accent md:block" viewBox="0 0 12 12" fill="none">
+        <svg className="hidden size-3.5 text-faint transition-colors group-hover:text-accent md:block" viewBox="0 0 12 12" fill="none" aria-hidden>
           <path d="M3.5 8.5 8.5 3.5M4.5 3.5h4v4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
-      </a>
+        <a
+          href={l.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={[ils(l.price), cityName(l.city), placeLine(l)].filter(Boolean).join(", ")}
+          className="absolute inset-0 z-[1] outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent"
+        />
+      </div>
       <StarButton id={l.id} starred={l.starredAt != null} className="mr-2" />
     </div>
   );

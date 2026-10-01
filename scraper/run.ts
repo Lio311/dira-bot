@@ -10,7 +10,7 @@ import { getCities } from "../src/lib/cities";
 import { CITIES } from "../src/lib/config";
 import { closeBrowser } from "./lib/browser";
 import { renderEmail, sendEmail } from "./lib/email";
-import { normalize, saveListings, type PriceDrop } from "./lib/store";
+import { normalize, saveListings, type Normalized, type PriceChange } from "./lib/store";
 import { sendToSubscribers } from "./lib/subscribers";
 import { verifyRemoved } from "./lib/verify-removed";
 import { yad2 } from "./sources/yad2";
@@ -42,7 +42,8 @@ async function main() {
   if (custom.length) log(`cities: ${cities.length} (added from the dashboard: ${custom.map((c) => c.name).join(", ")})`);
 
   const warnings: string[] = [];
-  const drops: PriceDrop[] = [];
+  const drops: PriceChange[] = [];
+  const rises: PriceChange[] = [];
   const dryRows: NewListing[] = [];
   let anySucceeded = false;
 
@@ -58,7 +59,7 @@ async function main() {
     const [run] = db ? await db.insert(scrapeRuns).values({ source: source.key, status: "running" }).returning() : [];
     try {
       const res = await source.run({ cities });
-      const kept = res.listings.map((l) => normalize(l, cities)).filter((l): l is NewListing => l !== null);
+      const kept = res.listings.map((l) => normalize(l, cities)).filter((l): l is Normalized => l !== null);
       log(`${source.key}: ${res.listings.length} scraped, ${kept.length} match criteria`);
       res.warnings.forEach((w) => log(`  ⚠ ${w}`));
       warnings.push(...res.warnings.map((w) => `${source.key}: ${w}`));
@@ -68,6 +69,7 @@ async function main() {
         const saved = await saveListings(db, kept);
         inserted = saved.inserted.length;
         drops.push(...saved.priceDrops);
+        rises.push(...saved.priceRises);
       } else dryRows.push(...kept);
 
       if (db && run)
@@ -110,18 +112,18 @@ async function main() {
     .select()
     .from(listings)
     .where(and(isNull(listings.notifiedAt), isNull(listings.duplicateOf), isNull(listings.removedAt)));
-  if (noEmail || (!fresh.length && !drops.length)) {
+  if (noEmail || (!fresh.length && !drops.length && !rises.length)) {
     log(noEmail ? "email disabled for this run" : "nothing new to email");
   } else {
     try {
-      const { subject, html } = renderEmail(fresh, drops, warnings, { cities });
+      const { subject, html } = renderEmail(fresh, drops, warnings, { cities, rises });
       await sendEmail(subject, html);
       log(`email sent: ${subject}`);
       await db!
         .update(listings)
         .set({ notifiedAt: new Date() })
         .where(inArray(listings.id, fresh.map((l) => l.id)));
-      await sendToSubscribers(db!, fresh, drops, log, cities);
+      await sendToSubscribers(db!, fresh, drops, log, cities, rises);
     } catch (e) {
       log(`email not sent: ${(e as Error).message}`);
     }
