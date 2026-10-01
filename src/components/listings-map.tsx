@@ -177,8 +177,11 @@ function setMarkerActive(entry: MarkerEntry | undefined, active: boolean, select
 /* ------------------------------------------------------------------ */
 
 // Built with DOM APIs only: every string here is scraped third-party text.
-function buildPopupContent(l: Located): HTMLElement {
-  const card = h("div", "lm-card");
+function buildPopupContent(l: Located, mapWidth: number, mapHeight: number): HTMLElement {
+  // Short maps (the mobile layout) get a horizontal card that fits under a pin.
+  const compact = mapHeight < 520;
+  const card = h("div", compact ? "lm-card lm-card--compact" : "lm-card");
+  card.style.width = `${Math.min(compact ? 300 : 264, mapWidth - 32)}px`;
   const href = safeHttpUrl(l.url);
   const image = safeHttpUrl(l.image);
 
@@ -484,7 +487,7 @@ export default function ListingsMap({ listings, hoveredId, selectedId, onHover, 
       padding: { top: 12, right: 12, bottom: 12, left: 12 },
     })
       .setLngLat(lngLat)
-      .setDOMContent(buildPopupContent(listing));
+      .setDOMContent(buildPopupContent(listing, map.getContainer().clientWidth, map.getContainer().clientHeight));
 
     const open: OpenPopup = {
       id: listing.id,
@@ -498,13 +501,24 @@ export default function ListingsMap({ listings, hoveredId, selectedId, onHover, 
     popup.addTo(map);
     popupRef.current = open;
 
-    // Bring it into view if the marker is off-screen (or hugging an edge).
-    const pt = map.project(lngLat);
-    const { clientWidth: w, clientHeight: hgt } = map.getContainer();
-    const margin = 32;
-    if (pt.x < margin || pt.y < margin || pt.x > w - margin || pt.y > hgt - margin) {
-      map.easeTo({ center: lngLat, duration: 500 });
-    }
+    // Once the open animation settles, pan just enough that the whole card sits inside the map.
+    const content = popup.getElement().querySelector<HTMLElement>(".maplibregl-popup-content");
+    let done = false;
+    const fit = () => {
+      if (done || popupRef.current !== open) return;
+      done = true;
+      const box = map.getContainer().getBoundingClientRect();
+      const card = (content ?? popup.getElement()).getBoundingClientRect();
+      const margin = 12;
+      const dx =
+        card.left < box.left + margin ? card.left - box.left - margin : card.right > box.right - margin ? card.right - box.right + margin : 0;
+      const dy =
+        card.top < box.top + margin ? card.top - box.top - margin : card.bottom > box.bottom - margin ? card.bottom - box.bottom + margin : 0;
+      const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      if (dx || dy) map.panBy([dx, dy], { duration: reduce ? 0 : 450 });
+    };
+    content?.addEventListener("animationend", fit, { once: true });
+    setTimeout(fit, 260); // reduced motion: no animation, so no animationend
   }, [map, selectedId, located]);
 
   return (

@@ -181,6 +181,33 @@
   line-height: 1.4;
 }
 
+/* Compact horizontal card for short (mobile) maps: thumbnail beside the details. */
+.lm-card--compact {
+  display: flex;
+}
+.lm-card--compact .lm-card-media {
+  flex: 0 0 92px;
+  aspect-ratio: auto;
+  border-bottom: 0;
+  border-right: 1px solid var(--border);
+}
+.lm-card--compact .lm-card-body {
+  min-width: 0;
+  flex: 1;
+  padding: 10px 12px;
+}
+.lm-card--compact .lm-card-price {
+  font-size: 15px;
+}
+.lm-card--compact .lm-card-place {
+  margin-top: 3px;
+}
+.lm-card--compact .lm-card-foot {
+  margin-top: 6px;
+  padding-top: 0;
+  border-top: 0;
+}
+
 .lm-card-media {
   display: block;
   aspect-ratio: 16 / 9;
