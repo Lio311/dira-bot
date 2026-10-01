@@ -37,6 +37,7 @@ export function normalize(r: RawListing): NewListing | null {
     images: (r.images ?? []).slice(0, 8),
     ...coords(r.lat, r.lng),
     isAgency: r.isAgency ?? null,
+    features: r.features ?? {},
     postedAt: r.postedAt && !isNaN(r.postedAt.getTime()) ? r.postedAt : null,
     fingerprint: r.fingerprint ?? fingerprint(city.key, street, rooms, r.sqm ?? null),
   };
@@ -116,6 +117,8 @@ export async function saveListings(db: Db, batch: NewListing[]) {
           sqm: item.sqm ?? prev.sqm,
           lat: item.lat ?? prev.lat,
           lng: item.lng ?? prev.lng,
+          // New readings add to (or correct) what we know; keys this run didn't see stay.
+          features: { ...prev.features, ...item.features },
           ...(priceChanged && {
             price: item.price,
             priceHistory: [...prev.priceHistory, { price: item.price!, at: now.toISOString() }],

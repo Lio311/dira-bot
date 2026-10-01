@@ -14,9 +14,11 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
+import type { FeatureKey } from "@/db/schema";
 import { CITIES, CRITERIA, SOURCES, type SourceKey } from "@/lib/config";
 import type { ListingView, SourceStatus } from "@/lib/data";
 import { ilsShort, isFresh, relativeTime } from "@/lib/format";
+import { AMENITIES, AmenityIcon, amenityTitle } from "./amenities";
 import { buildHistogram, Chip, RangeSlider, Segmented, Select, Toggle, ToggleGroup } from "./controls";
 import { ListingCard, ListingRow } from "./listing-card";
 import { Logo } from "./logo";
@@ -120,10 +122,7 @@ const RANGES: {
   { key: "ppsqm", label: "₪/m²", noun: "₪/m² figure", step: 1_000, get: perSqmOf, format: (v, open) => `${ilsShort(v)}${open ? "+" : ""}` },
 ];
 
-/**
- * Boolean filters. Amenities (parking, elevator, balcony, safe room…) slot in here once the scraper
- * provides them: add an entry and it gets a toggle, a filter test and a place in the active count.
- */
+/** Boolean filters: add an entry and it gets a toggle, a filter test and a place in the active count. */
 const FLAGS = {
   withPhotos: { label: "With photos", test: (l: ListingView) => !!l.image },
   priceDropped: { label: "Price dropped", test: (l: ListingView) => dropOf(l) != null },
@@ -143,12 +142,14 @@ type Filters = {
   rooms: number[];
   types: string[];
   posted: Posted;
+  /** Every selected amenity must be stated by the listing (unknown counts as no). */
+  amenities: FeatureKey[];
 } & Record<RangeKey, Range | null> & // null = full extent
   Record<FlagKey, boolean>;
 
 const flagsOff = Object.fromEntries(FLAG_KEYS.map((k) => [k, false])) as Record<FlagKey, boolean>;
 /** Everything behind "More filters" on desktop. */
-const ADVANCED_OFF = { price: null, sqm: null, floor: null, ppsqm: null, types: [], posted: 0, ...flagsOff } satisfies Partial<Filters>;
+const ADVANCED_OFF = { price: null, sqm: null, floor: null, ppsqm: null, types: [], posted: 0, amenities: [], ...flagsOff } satisfies Partial<Filters>;
 const NO_FILTERS: Filters = { priority: 0, cities: [], source: "all", rooms: [], ...ADVANCED_OFF };
 
 const ROOMS = [4, 4.5, 5];
@@ -169,7 +170,13 @@ function typeOf(l: ListingView): string | null {
 const typeLabel = (key: string) => TYPE_KINDS.find((k) => k.key === key)?.label ?? key;
 
 function countAdvanced(f: Filters) {
-  return RANGES.filter((d) => f[d.key]).length + f.types.length + (f.posted ? 1 : 0) + FLAG_KEYS.filter((k) => f[k]).length;
+  return (
+    RANGES.filter((d) => f[d.key]).length +
+    f.types.length +
+    (f.posted ? 1 : 0) +
+    f.amenities.length +
+    FLAG_KEYS.filter((k) => f[k]).length
+  );
 }
 /** Active filters, excluding the search text. */
 function countFilters(f: Filters) {
@@ -204,6 +211,7 @@ function buildMatcher(f: Filters, q: string, now: number, bounds: Record<RangeKe
     if (r) tests.push([d.key, (l) => inRange(d.get(l), r, bounds[d.key])]);
   }
   if (f.posted) tests.push(["posted", (l) => now - postedTime(l) < f.posted * 86_400_000]);
+  if (f.amenities.length) tests.push(["amenities", (l) => f.amenities.every((k) => l.features[k] === true)]);
   for (const k of FLAG_KEYS) if (f[k]) tests.push([k, (l) => FLAGS[k].test(l, now)]);
   if (q) tests.push(["q", (l) => [l.street, l.neighborhood, l.title, l.description].some((x) => x?.toLowerCase().includes(q))]);
   return (l: ListingView, skip?: string) => tests.every(([k, t]) => k === skip || t(l));
@@ -281,6 +289,16 @@ export function Dashboard({ listings, status, now }: { listings: ListingView[]; 
       }),
     ) as Record<RangeKey, { histogram: number[]; missing: number }>;
   }, [panelOpen, listings, match, bounds]);
+
+  // Per amenity: how many listings would show if it were (also) selected, against every other filter.
+  const amenityCounts = useMemo(() => {
+    const out = new Map<FeatureKey, number>();
+    for (const l of listings) {
+      if (!match(l, "amenities") || !f.amenities.every((k) => l.features[k] === true)) continue;
+      for (const { key } of AMENITIES) if (l.features[key] === true) out.set(key, (out.get(key) ?? 0) + 1);
+    }
+    return out;
+  }, [listings, match, f.amenities]);
 
   const stats = useMemo(() => {
     const fresh = listings.filter((l) => isFresh(l.firstSeenAt, 24, now)).length;
@@ -444,6 +462,18 @@ export function Dashboard({ listings, status, now }: { listings: ListingView[]; 
             { value: 30, label: "30 days" },
           ]}
         />
+      </FilterSection>
+      <FilterSection title="Amenities">
+        <div className="flex flex-wrap gap-2">
+          {AMENITIES.map((a) => (
+            <Chip key={a.key} active={filters.amenities.includes(a.key)} onClick={() => update({ amenities: toggleIn(filters.amenities, a.key) })}>
+              <AmenityIcon k={a.key} />
+              <span title={amenityTitle(a)}>{a.label}</span>
+              <span className="tabular opacity-60">{amenityCounts.get(a.key) ?? 0}</span>
+            </Chip>
+          ))}
+        </div>
+        <p className="mt-2 text-[12px] text-faint">Only listings that state it are shown. Many ads don’t list amenities.</p>
       </FilterSection>
       <FilterSection title="More">
         <div className="-mx-2 grid grid-cols-2 gap-x-2 gap-y-1">

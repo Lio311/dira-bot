@@ -4,6 +4,7 @@ import { memo, useState } from "react";
 import { CITY_BY_KEY, PRIORITY_LABEL, SOURCES, type CityKey, type Priority, type SourceKey } from "@/lib/config";
 import type { ListingView } from "@/lib/data";
 import { ils, ilsShort, isFresh, relativeTime } from "@/lib/format";
+import { AmenityList } from "./amenities";
 import { LogoMark } from "./logo";
 
 export const priorityVars = (p: number) => ({
@@ -131,6 +132,7 @@ export const ListingCard = memo(function ListingCard({
             {place}
           </p>
         )}
+        <AmenityList features={l.features} className="pt-0.5" />
         <div className="mt-auto flex items-center justify-between pt-3 text-[12px] text-faint">
           <span>
             {l.postedAt ? `Posted ${relativeTime(l.postedAt, now)}` : `Found ${relativeTime(l.firstSeenAt, now)}`}
@@ -167,15 +169,18 @@ export function ListingRow({ l, now }: { l: ListingView; now: number }) {
           .filter(Boolean)
           .join(" · ")}
       </span>
-      <span className="col-span-3 line-clamp-1 text-[13px] text-fg/80 md:col-span-1">
-        <span className="font-medium text-fg">{cityName(l.city)}</span>
-        {placeLine(l) && (
-          <span className="text-muted">
-            {" · "}
-            <bdi>{placeLine(l)}</bdi>
-          </span>
-        )}
-      </span>
+      <div className="col-span-3 flex min-w-0 items-center gap-3 md:col-span-1">
+        <span className="line-clamp-1 min-w-0 flex-1 text-[13px] text-fg/80">
+          <span className="font-medium text-fg">{cityName(l.city)}</span>
+          {placeLine(l) && (
+            <span className="text-muted">
+              {" · "}
+              <bdi>{placeLine(l)}</bdi>
+            </span>
+          )}
+        </span>
+        <AmenityList features={l.features} compact className="shrink-0 max-md:hidden" />
+      </div>
       <span className="hidden text-[12px] text-muted md:block">{sourceName(l.source)}</span>
       <span className="hidden text-[12px] text-faint md:block">{relativeTime(l.postedAt ?? l.firstSeenAt, now)}</span>
       <svg className="hidden size-3.5 text-faint transition-colors group-hover:text-accent md:block" viewBox="0 0 12 12" fill="none">

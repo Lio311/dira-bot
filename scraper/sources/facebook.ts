@@ -1,6 +1,6 @@
 import { CITIES, matchCity } from "../../src/lib/config";
 import { apifySkipReason, everyNDaysSkipReason, runActor } from "../lib/apify";
-import { firstLine, isSalePost, parsePrice, parseRooms, parseSqm, textFingerprint } from "../lib/hebrew";
+import { firstLine, isSalePost, parseFeatures, parsePrice, parseRooms, parseSqm, textFingerprint } from "../lib/hebrew";
 import type { RawListing, Source } from "../types";
 
 // Facebook content is only readable when logged in. Rather than automating the user's
@@ -85,6 +85,7 @@ export const facebookGroups: Source = {
         price: listedPrice ?? parsePrice(text),
         images: image ? [image] : [],
         postedAt: p.time ? new Date(p.time) : null,
+        features: parseFeatures(text),
         lenientRooms: true,
         fingerprint: textFingerprint(text),
       });
@@ -121,6 +122,7 @@ export const facebookMarketplace: Source = {
         sqm: parseSqm(text),
         price: i.price ?? parsePrice(text),
         images: i.image ? [i.image] : [],
+        features: parseFeatures(text),
         lenientRooms: true,
         fingerprint: textFingerprint(text),
       });
