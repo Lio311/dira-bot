@@ -291,12 +291,12 @@ export default function ListingsMap({ listings, hoveredId, selectedId, onHover, 
     let cancelled = false;
     let instance: MapLibreMap | null = null;
 
-    if (getRTLTextPluginStatus() === "unavailable") {
-      setRTLTextPlugin(RTL_PLUGIN_URL, true).catch(() => {});
-    }
-
     prepareWorker().then(() => {
       if (cancelled) return;
+      // Only after the worker URL is set: registering the plugin spins up the worker pool.
+      if (getRTLTextPluginStatus() === "unavailable") {
+        setRTLTextPlugin(RTL_PLUGIN_URL, true).catch(() => {});
+      }
       const style = styleFor(isDark());
       const m = new MapLibreMap({
         container,
