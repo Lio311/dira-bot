@@ -2,12 +2,16 @@ import { and, eq, inArray, isNull } from "drizzle-orm";
 import { CITIES, CRITERIA, inCriteria, matchCity, type City } from "../../src/lib/config";
 import type { getDb } from "../../src/db/client";
 import { listings, type Listing, type NewListing } from "../../src/db/schema";
+import { mergePriceHistory, type SitePrice } from "../../src/lib/price-history";
 import type { RawListing } from "../types";
 
 type Db = ReturnType<typeof getDb>;
 
+/** A row ready to save, plus the prices the site itself reports (merged into the stored history on save). */
+export type Normalized = NewListing & { sitePrices?: SitePrice[] };
+
 /** City match + criteria filter. Returns null for listings we don't track. */
-export function normalize(r: RawListing, cities: readonly City[] = CITIES): NewListing | null {
+export function normalize(r: RawListing, cities: readonly City[] = CITIES): Normalized | null {
   const city = matchCity(r.cityText, cities);
   if (!city) return null;
   const rooms = r.rooms != null && Number.isFinite(r.rooms) ? r.rooms : null;
@@ -19,6 +23,7 @@ export function normalize(r: RawListing, cities: readonly City[] = CITIES): NewL
   if (!fits) return null;
 
   const street = r.street?.trim() || null;
+  const postedAt = r.postedAt && !isNaN(r.postedAt.getTime()) ? r.postedAt : null;
   return {
     source: r.source,
     externalId: r.externalId,
@@ -38,8 +43,12 @@ export function normalize(r: RawListing, cities: readonly City[] = CITIES): NewL
     ...coords(r.lat, r.lng),
     isAgency: r.isAgency ?? null,
     features: r.features ?? {},
-    postedAt: r.postedAt && !isNaN(r.postedAt.getTime()) ? r.postedAt : null,
+    postedAt,
     fingerprint: r.fingerprint ?? fingerprint(city.key, street, rooms, r.sqm ?? null),
+    // An undated site price (Yad2's "price before") dates from the ad's posting when we know it.
+    ...(r.priceHistory?.length && {
+      sitePrices: r.priceHistory.map((p) => (p.at == null && postedAt ? { ...p, at: postedAt.toISOString() } : p)),
+    }),
   };
 }
 
@@ -61,16 +70,18 @@ function fingerprint(city: string, street: string | null, rooms: number | null, 
   return `${city}|${s}|${rooms}|${size}`;
 }
 
-export interface PriceDrop {
+/** A price we saw change between two scrapes: `from` is the price we had stored. */
+export interface PriceChange {
   listing: Listing;
   from: number;
 }
 
-export async function saveListings(db: Db, batch: NewListing[]) {
+export async function saveListings(db: Db, batch: Normalized[]) {
   const unique = [...new Map(batch.map((l) => [`${l.source}:${l.externalId}`, l])).values()];
   const inserted: Listing[] = [];
-  const priceDrops: PriceDrop[] = [];
-  if (!unique.length) return { inserted, priceDrops };
+  const priceDrops: PriceChange[] = [];
+  const priceRises: PriceChange[] = [];
+  if (!unique.length) return { inserted, priceDrops, priceRises };
 
   const now = new Date();
   const bySource = Map.groupBy(unique, (l) => l.source);
@@ -82,7 +93,7 @@ export async function saveListings(db: Db, batch: NewListing[]) {
       .where(and(eq(listings.source, source), inArray(listings.externalId, items.map((i) => i.externalId))));
     const known = new Map(existing.map((e) => [e.externalId, e]));
 
-    for (const item of items) {
+    for (const { sitePrices, ...item } of items) {
       const prev = known.get(item.externalId);
       if (!prev) {
         let duplicateOf: number | null = null;
@@ -99,7 +110,7 @@ export async function saveListings(db: Db, batch: NewListing[]) {
           .values({
             ...item,
             duplicateOf,
-            priceHistory: item.price ? [{ price: item.price, at: now.toISOString() }] : [],
+            priceHistory: mergePriceHistory(item.price ? [{ price: item.price, at: now.toISOString() }] : [], sitePrices, now),
           })
           .onConflictDoNothing()
           .returning();
@@ -108,6 +119,10 @@ export async function saveListings(db: Db, batch: NewListing[]) {
       }
 
       const priceChanged = item.price != null && item.price !== prev.price;
+      // Site-reported prices first (they describe the past), then our own reading of a change.
+      const merged = mergePriceHistory(prev.priceHistory, sitePrices, now);
+      if (priceChanged) merged.push({ price: item.price!, at: now.toISOString() });
+      const historyChanged = merged.length !== prev.priceHistory.length;
       const [row] = await db
         .update(listings)
         .set({
@@ -121,17 +136,15 @@ export async function saveListings(db: Db, batch: NewListing[]) {
           lng: item.lng ?? prev.lng,
           // New readings add to (or correct) what we know; keys this run didn't see stay.
           features: { ...prev.features, ...item.features },
-          ...(priceChanged && {
-            price: item.price,
-            priceHistory: [...prev.priceHistory, { price: item.price!, at: now.toISOString() }],
-          }),
+          ...(priceChanged && { price: item.price }),
+          ...(historyChanged && { priceHistory: merged }),
         })
         .where(eq(listings.id, prev.id))
         .returning();
-      if (priceChanged && prev.price && item.price! < prev.price && !row.duplicateOf) {
-        priceDrops.push({ listing: row, from: prev.price });
+      if (priceChanged && prev.price && !row.duplicateOf) {
+        (item.price! < prev.price ? priceDrops : priceRises).push({ listing: row, from: prev.price });
       }
     }
   }
-  return { inserted, priceDrops };
+  return { inserted, priceDrops, priceRises };
 }

@@ -5,6 +5,7 @@ import { listings, scrapeRuns, type FeatureKey } from "@/db/schema";
 import { usableImage } from "@/lib/images";
 import { getCities } from "@/lib/cities";
 import { passcodeRequired } from "@/lib/passcode";
+import { summarizePrices, type PriceEntry } from "@/lib/price-history";
 
 export interface ListingView {
   id: number;
@@ -30,7 +31,14 @@ export interface ListingView {
   postedAt: string | null;
   firstSeenAt: string;
   lastSeenAt: string;
+  /** The price before the latest change. */
   previousPrice: number | null;
+  /** The last ~12 known prices, oldest first, each a change from the one before; empty when the price never changed. */
+  priceHistory: PriceEntry[];
+  /** Current price minus the first known price; null when it never changed. */
+  priceChange: number | null;
+  /** When the latest change happened; null when none, or unknown (only the site's undated "price before"). */
+  priceChangedAt: string | null;
   /** Set when the ad was confirmed taken down ("Not relevant" on the dashboard). */
   removedAt: string | null;
   /** When the owner starred it (favorites); null = not starred. */
@@ -99,8 +107,7 @@ export async function getDashboardData() {
   const alsoOn = Map.groupBy(dupes, (d) => d.duplicateOf!);
 
   const view: ListingView[] = rows.map((l) => {
-    const history = l.priceHistory;
-    const prev = history.length > 1 ? history[history.length - 2].price : null;
+    const prices = summarizePrices(l.priceHistory);
     return {
       id: l.id,
       source: l.source,
@@ -124,7 +131,10 @@ export async function getDashboardData() {
       postedAt: l.postedAt?.toISOString() ?? null,
       firstSeenAt: l.firstSeenAt.toISOString(),
       lastSeenAt: l.lastSeenAt.toISOString(),
-      previousPrice: prev,
+      previousPrice: prices.previous,
+      priceHistory: prices.points,
+      priceChange: prices.change,
+      priceChangedAt: prices.changedAt,
       removedAt: l.removedAt?.toISOString() ?? null,
       starredAt: l.starredAt?.toISOString() ?? null,
       alsoOn: (alsoOn.get(l.id) ?? []).map((d) => ({ source: d.source, url: d.url })),

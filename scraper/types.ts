@@ -1,5 +1,6 @@
 import type { FeatureKey } from "../src/db/schema";
 import type { City, SourceKey } from "../src/lib/config";
+import type { SitePrice } from "../src/lib/price-history";
 
 /** Amenities a source states. A missing key means unknown, `false` means explicitly absent. */
 export type Features = Partial<Record<FeatureKey, boolean>>;
@@ -29,6 +30,11 @@ export interface RawListing {
   /** Overrides the address-based duplicate signature (free-text sources). */
   fingerprint?: string | null;
   features?: Features;
+  /**
+   * Earlier asking prices the site itself publishes (Yad2's "price before" tag, Madlan's history).
+   * `at` null = the site gives no date. Merged into the stored history by saveListings.
+   */
+  priceHistory?: SitePrice[];
 }
 
 export class BlockedError extends Error {

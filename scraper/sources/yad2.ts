@@ -13,6 +13,8 @@ interface Yad2Item {
   token?: string;
   adType?: string;
   price?: number;
+  /** The earlier asking price Yad2 shows struck through after a cut (e.g. price 3,950,000, priceBeforeTag 4,500,000). Undated. */
+  priceBeforeTag?: number | null;
   address?: {
     city?: { text?: string };
     neighborhood?: { text?: string };
@@ -63,6 +65,7 @@ function toListing(i: Yad2Item): RawListing | null {
     // Tags are highlights, not a full checklist: a missing tag means unknown, never "no".
     features: parseFeatures(i.tags?.map((t) => t.name).join(", ")),
     title: [i.additionalDetails?.property?.text, street].filter(Boolean).join(" · ") || null,
+    ...(i.priceBeforeTag && i.price && i.priceBeforeTag !== i.price && { priceHistory: [{ price: i.priceBeforeTag, at: null }] }),
   };
 }
 

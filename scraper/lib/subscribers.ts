@@ -4,7 +4,7 @@ import { subscribers, type Listing } from "../../src/db/schema";
 import { getMailer, sleep, subscriptionLinks, unsubscribeHeaders } from "../../src/lib/mailer";
 import type { City } from "../../src/lib/config";
 import { renderEmail } from "./email";
-import type { PriceDrop } from "./store";
+import type { PriceChange } from "./store";
 
 type Db = ReturnType<typeof getDb>;
 
@@ -19,9 +19,10 @@ const DELAY_MS = Number(process.env.SUBSCRIBER_DELAY_MS ?? 1500);
 export async function sendToSubscribers(
   db: Db,
   fresh: Listing[],
-  drops: PriceDrop[],
+  drops: PriceChange[],
   log: (...m: unknown[]) => void,
   cities?: readonly City[],
+  rises: PriceChange[] = [],
 ) {
   try {
     const active = await db.select().from(subscribers).where(eq(subscribers.status, "active"));
@@ -47,10 +48,11 @@ export async function sendToSubscribers(
       const keep = (l: Listing) => s.minPriority == null || l.priority <= s.minPriority;
       const theirFresh = fresh.filter(keep);
       const theirDrops = drops.filter((d) => keep(d.listing));
-      if (!theirFresh.length && !theirDrops.length) continue;
+      const theirRises = rises.filter((d) => keep(d.listing));
+      if (!theirFresh.length && !theirDrops.length && !theirRises.length) continue;
 
       const links = subscriptionLinks(base, s.token);
-      const { subject, html } = renderEmail(theirFresh, theirDrops, [], { unsubscribeUrl: links.unsubscribe, cities });
+      const { subject, html } = renderEmail(theirFresh, theirDrops, [], { unsubscribeUrl: links.unsubscribe, cities, rises: theirRises });
       if (sent + failed > 0) await sleep(DELAY_MS);
       try {
         await mailer.transport.sendMail({ from: mailer.from, to: s.email, subject, html, headers: unsubscribeHeaders(links.oneClick) });

@@ -1,7 +1,7 @@
 import { CITIES, cityName, PRIORITY_LABEL, SOURCES, type City, type Priority, type SourceKey } from "../../src/lib/config";
 import type { Listing } from "../../src/db/schema";
 import { getMailer } from "../../src/lib/mailer";
-import type { PriceDrop } from "./store";
+import type { PriceChange } from "./store";
 
 const MAX_ROWS = 40;
 
@@ -38,13 +38,26 @@ function row(l: Listing, cities: readonly City[], note?: string) {
   </td></tr>`;
 }
 
+/** Price increases: one compact line each, below the main list. */
+function riseRow(c: PriceChange, cities: readonly City[]) {
+  const l = c.listing;
+  const place = [cityName(l.city, cities), l.neighborhood, l.street].filter(Boolean).join(", ");
+  return `
+  <tr><td style="padding:8px 0;border-bottom:1px solid #f1f0ed;font-size:13px;color:#57534e">
+    <a href="${esc(l.url)}" style="color:#1c1b19;text-decoration:none;font-weight:600;font-variant-numeric:tabular-nums">${ils(l.price)}</a>
+    <span style="color:#b45309;font-weight:500"> ↑ from ${ils(c.from)}</span>
+    <span dir="auto" style="color:#8a8780"> · ${esc(place)}</span>
+  </td></tr>`;
+}
+
 export function renderEmail(
   fresh: Listing[],
-  drops: PriceDrop[],
+  drops: PriceChange[],
   runWarnings: string[],
   /** Subscriber copies get an unsubscribe footer; the owner's copy (NOTIFY_TO) doesn't. */
-  opts: { unsubscribeUrl?: string; cities?: readonly City[] } = {},
+  opts: { unsubscribeUrl?: string; cities?: readonly City[]; rises?: PriceChange[] } = {},
 ) {
+  const rises = opts.rises ?? [];
   const cities = opts.cities ?? CITIES;
   const sorted = [...fresh].sort((a, b) => a.priority - b.priority || (a.price ?? 0) - (b.price ?? 0));
   const shown = sorted.slice(0, MAX_ROWS);
@@ -61,7 +74,7 @@ export function renderEmail(
     <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#fff;border-radius:16px;border:1px solid #ecebe8">
       <tr><td style="padding:28px 28px 8px">
         <div style="font-size:15px;font-weight:700;color:#1c1b19;letter-spacing:-.01em">dira<span style="color:#0f766e">Bot</span></div>
-        <div style="font-size:24px;font-weight:650;color:#1c1b19;margin-top:18px;letter-spacing:-.02em">${fresh.length} new listing${fresh.length === 1 ? "" : "s"}${drops.length ? `, ${drops.length} price drop${drops.length === 1 ? "" : "s"}` : ""}</div>
+        <div style="font-size:24px;font-weight:650;color:#1c1b19;margin-top:18px;letter-spacing:-.02em">${fresh.length} new listing${fresh.length === 1 ? "" : "s"}${drops.length ? `, ${drops.length} price drop${drops.length === 1 ? "" : "s"}` : ""}${rises.length ? `, ${rises.length} increase${rises.length === 1 ? "" : "s"}` : ""}</div>
         <div style="font-size:13px;color:#8a8780;margin-top:4px">${counts || "No new listings this round"}</div>
       </td></tr>
       <tr><td style="padding:0 28px">
@@ -70,6 +83,12 @@ export function renderEmail(
           ${shown.map((l) => row(l, cities)).join("")}
         </table>
         ${sorted.length > MAX_ROWS ? `<p style="font-size:13px;color:#57534e;margin:16px 0 0">+${sorted.length - MAX_ROWS} more on the dashboard.</p>` : ""}
+        ${
+          rises.length
+            ? `<div style="font-size:12px;font-weight:600;color:#8a8780;letter-spacing:.04em;text-transform:uppercase;margin:24px 0 2px">Price increases</div>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0">${rises.slice(0, MAX_ROWS).map((c) => riseRow(c, cities)).join("")}</table>`
+            : ""
+        }
       </td></tr>
       <tr><td style="padding:24px 28px 28px">
         ${dashboard ? `<a href="${esc(dashboard)}" style="font-size:13px;color:#0f766e;text-decoration:none;font-weight:600">Open dashboard →</a>` : ""}
@@ -82,7 +101,9 @@ export function renderEmail(
   const top = sorted[0];
   const subject = fresh.length
     ? `diraBot · ${fresh.length} new${top ? ` · top: ${cityName(top.city, cities)} ${ils(top.price)}` : ""}`
-    : `diraBot · ${drops.length} price drop${drops.length === 1 ? "" : "s"}`;
+    : drops.length
+      ? `diraBot · ${drops.length} price drop${drops.length === 1 ? "" : "s"}${rises.length ? `, ${rises.length} increase${rises.length === 1 ? "" : "s"}` : ""}`
+      : `diraBot · ${rises.length} price increase${rises.length === 1 ? "" : "s"}`;
   return { subject, html };
 }
 
