@@ -1,5 +1,5 @@
 import { CRITERIA } from "../../src/lib/config";
-import { apifySkipReason, runActor } from "../lib/apify";
+import { apifyFeatures, apifySkipReason, runActor } from "../lib/apify";
 import type { RawListing, Source } from "../types";
 
 // Madlan sits behind a PerimeterX "press & hold" challenge that we don't try to defeat.
@@ -61,6 +61,7 @@ export const madlan: Source = {
         lng: i.longitude ?? null,
         images: i.images ?? [],
         isAgency: i.hasAgent ?? null,
+        features: apifyFeatures(i),
         postedAt: i.firstSeen ? new Date(i.firstSeen) : null,
         title: street,
       });

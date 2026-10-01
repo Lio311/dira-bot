@@ -1,5 +1,6 @@
 import type { City } from "../../src/lib/config";
 import { newContext } from "../lib/browser";
+import { parseFeatures } from "../lib/hebrew";
 import { BlockedError, type RawListing, type Source } from "../types";
 
 // Homeless is a classic server-rendered board behind Cloudflare. The first page view of
@@ -52,6 +53,7 @@ export const homeless: Source = {
         trs.map((tr) => ({
           id: tr.id.replace("ad_", ""),
           img: tr.querySelector("img.PictureDisplayOnBoard")?.getAttribute("src") ?? null,
+          summary: tr.querySelector("a[title]")?.getAttribute("title") ?? "",
           cells: [...tr.querySelectorAll("td")].map((td) => (td.textContent ?? "").trim()),
         })),
       );
@@ -72,6 +74,8 @@ export const homeless: Source = {
           price: parsePrice(price ?? ""),
           images: r.img && !r.img.includes("nopic") ? [r.img] : [],
           postedAt: parseDate(date ?? ""),
+          // The board has no amenity columns; the link's one-line summary occasionally names some.
+          features: parseFeatures(r.summary),
           title: [type, street].filter(Boolean).join(" · ") || null,
         };
       });

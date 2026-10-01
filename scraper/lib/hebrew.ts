@@ -1,6 +1,9 @@
 // Heuristics for pulling structured fields out of free-text Hebrew listing posts
 // (Facebook groups / Marketplace descriptions).
 
+import type { FeatureKey } from "../../src/db/schema";
+import type { Features } from "../types";
+
 const WORD_ROOMS: Record<string, number> = {
   "ארבעה": 4,
   "ארבע": 4,
@@ -73,6 +76,57 @@ export function textFingerprint(text: string): string {
   let h = 5381;
   for (let i = 0; i < norm.length; i++) h = ((h << 5) + h + norm.charCodeAt(i)) | 0;
   return `txt|${(h >>> 0).toString(36)}`;
+}
+
+/**
+ * Amenity mentions. Each pattern is matched as a whole word, optionally behind one or two
+ * Hebrew prefix letters ("וחניה", "הממ״ד", "במעלית").
+ */
+const FEATURE_TERMS: [FeatureKey, string][] = [
+  ["parking", "חני(?:יה|ה|ות|יות|ית|יית)"],
+  ["elevator", "מעלי(?:ת|ות)"],
+  ["balcony", "מרפס(?:ת|ות)"],
+  ["safeRoom", "ממ[\"״'׳]?ד|מרחב\\s+מוגן|חדר\\s+ביטחון"],
+  ["airConditioning", "מזג(?:ן|נים)|מיזוג|ממוזג(?:ת)?"],
+  ["storage", "מחס(?:ן|נים)"],
+  // "נגישות לצירי תנועה" is about transport, so the word alone isn't enough.
+  ["accessible", "(?:נגיש(?:ה|ות)?|גישה)\\s+(?:ל)?(?:נכים|כיסא\\s+גלגלים|כסא\\s+גלגלים)|(?:דירה|בניין|בנין|כניסה)\\s+נגיש(?:ה)?"],
+  ["renovated", "משופצ(?:ת|ים)|משופץ|שופצה|שופץ|(?:לאחר|אחרי|עברה)\\s+שיפוץ|שיפוץ\\s+(?:מלא|כללי|יסודי|קומפלט)"],
+];
+const FEATURE_RES = FEATURE_TERMS.map(([key, src]) => [key, new RegExp(`(?<![א-ת])[ובהלשמכ]{0,2}(?:${src})(?![א-ת])`, "g")] as const);
+
+const NEGATION = /(?:^|[^א-ת])ו?(?:ללא|אין|בלי|לא|אינה|אינו)[\s\-–]*$/;
+/** "ללא חניה ומעלית": the negation carries over to the next "ו"-joined item. */
+const NEGATION_CHAIN = /(?:^|[^א-ת])ו?(?:ללא|אין|בלי)\s+\S+[\s,]*$/;
+const NEEDS_RENOVATION = /(?:דרוש|דורש|דורשת|דרושה|טעונ\S*|זקוק\S*|מצריכ\S*|צריכה)\s+(?:ל)?שיפוץ|(?<![א-ת])לשיפוץ(?![א-ת])/;
+
+/**
+ * Amenities stated in free text. A plain mention sets `true`, a negated one ("ללא מעלית",
+ * "אין חניה") sets `false`; anything not mentioned stays unknown. A positive mention wins
+ * over a negative one for the same amenity.
+ */
+export function parseFeatures(text: string | null | undefined): Features {
+  const out: Features = {};
+  if (!text) return out;
+  const t = clean(text);
+  for (const [key, re] of FEATURE_RES) {
+    let pos = false;
+    let neg = false;
+    for (const m of t.matchAll(re)) {
+      const before = t.slice(Math.max(0, m.index - 30), m.index);
+      // "בניין משופץ" describes the building, not the flat.
+      if (key === "renovated" && /בני?ין\s*$/.test(before)) continue;
+      if (NEGATION.test(before) || (m[0].startsWith("ו") && NEGATION_CHAIN.test(before))) neg = true;
+      else {
+        pos = true;
+        break;
+      }
+    }
+    if (pos) out[key] = true;
+    else if (neg) out[key] = false;
+  }
+  if (out.renovated === undefined && NEEDS_RENOVATION.test(t)) out.renovated = false;
+  return out;
 }
 
 export function firstLine(text: string, max = 90): string {

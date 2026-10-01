@@ -1,7 +1,7 @@
 import "server-only";
 import { and, desc, gt, isNotNull, isNull, sql } from "drizzle-orm";
 import { getDb } from "@/db/client";
-import { listings, scrapeRuns } from "@/db/schema";
+import { listings, scrapeRuns, type FeatureKey } from "@/db/schema";
 import { usableImage } from "@/lib/images";
 import { getCities } from "@/lib/cities";
 import { passcodeRequired } from "@/lib/passcode";
@@ -25,6 +25,8 @@ export interface ListingView {
   lng: number | null;
   image: string | null;
   isAgency: boolean | null;
+  /** Amenities the source states; a missing key means unknown. */
+  features: Partial<Record<FeatureKey, boolean>>;
   postedAt: string | null;
   firstSeenAt: string;
   lastSeenAt: string;
@@ -100,6 +102,7 @@ export async function getDashboardData() {
       lng: l.lng,
       image: l.images.map((i) => usableImage(i)).find(Boolean) ?? null,
       isAgency: l.isAgency,
+      features: l.features,
       postedAt: l.postedAt?.toISOString() ?? null,
       firstSeenAt: l.firstSeenAt.toISOString(),
       lastSeenAt: l.lastSeenAt.toISOString(),

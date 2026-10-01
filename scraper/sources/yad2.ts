@@ -1,6 +1,7 @@
 import { CRITERIA, type City } from "../../src/lib/config";
 import { newContext, jitter } from "../lib/browser";
-import { ApifyBudgetError, apifySkipReason, runActor } from "../lib/apify";
+import { ApifyBudgetError, apifyFeatures, apifySkipReason, runActor } from "../lib/apify";
+import { parseFeatures } from "../lib/hebrew";
 import { BlockedError, type RawListing, type Source } from "../types";
 
 // Yad2 renders its feed server-side into __NEXT_DATA__ (React Query dehydrated state),
@@ -21,6 +22,11 @@ interface Yad2Item {
   };
   additionalDetails?: { property?: { text?: string }; roomsCount?: number; squareMeter?: number };
   metaData?: { coverImage?: string; images?: string[]; squareMeterBuild?: number };
+  /**
+   * Up to 3 highlight tags the advertiser picked, e.g. "חניה", "ממ\"ד", "2 מרפסות", "נוף פתוח לעיר".
+   * (additionalDetails.propertyCondition is a bare numeric id with no label in the feed, so it's not used.)
+   */
+  tags?: { name?: string }[];
 }
 
 function feedUrl(cityCode: string, page: number) {
@@ -54,6 +60,8 @@ function toListing(i: Yad2Item): RawListing | null {
     lng: i.address.coords?.lon ?? null,
     images: i.metaData?.images?.length ? i.metaData.images : i.metaData?.coverImage ? [i.metaData.coverImage] : [],
     isAgency: i.adType ? i.adType !== "private" : null,
+    // Tags are highlights, not a full checklist: a missing tag means unknown, never "no".
+    features: parseFeatures(i.tags?.map((t) => t.name).join(", ")),
     title: [i.additionalDetails?.property?.text, street].filter(Boolean).join(" · ") || null,
   };
 }
@@ -111,6 +119,7 @@ async function viaApify(cities: City[]): Promise<RawListing[]> {
       lat: i.latitude ?? null,
       lng: i.longitude ?? null,
       isAgency: i.hasAgent ?? (i.adType ? i.adType !== "private" : null),
+      features: apifyFeatures(i),
       postedAt: i.publishedAt ? new Date(i.publishedAt) : null,
       title: i.address ?? null,
     }));
