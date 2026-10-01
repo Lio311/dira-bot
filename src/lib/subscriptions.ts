@@ -109,6 +109,12 @@ async function byToken(token: unknown) {
   return s ?? null;
 }
 
+/** Read-only lookup for the /unsubscribe page, which must not change anything on GET (link scanners pre-open links). */
+export async function subscriptionByToken(token: unknown) {
+  const s = await byToken(token);
+  return s ? { email: s.email, status: s.status, confirmed: !!s.confirmedAt } : null;
+}
+
 /** /subscribe/confirm: pending → active. An unsubscribed address has to sign up again. */
 export async function confirmSubscription(token: unknown): Promise<{ outcome: TokenOutcome; email?: string }> {
   const s = await byToken(token);
@@ -122,7 +128,7 @@ export async function confirmSubscription(token: unknown): Promise<{ outcome: To
   return { outcome: "confirmed", email: s.email };
 }
 
-/** /unsubscribe and the List-Unsubscribe one-click POST. Idempotent. */
+/** The /unsubscribe page's button and the List-Unsubscribe one-click POST. Idempotent. */
 export async function unsubscribe(token: unknown): Promise<{ outcome: TokenOutcome; email?: string }> {
   const s = await byToken(token);
   if (!s) return { outcome: "invalid" };

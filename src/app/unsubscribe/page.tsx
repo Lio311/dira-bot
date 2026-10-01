@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { connection } from "next/server";
 import { NoticePage } from "@/components/notice-page";
-import { maskEmail, unsubscribe } from "@/lib/subscriptions";
-import { UndoUnsubscribe } from "./undo";
+import { maskEmail, subscriptionByToken } from "@/lib/subscriptions";
+import { UnsubscribeFlow } from "./unsubscribe-flow";
 
 export const metadata: Metadata = {
   title: "Unsubscribe · diraBot",
@@ -10,22 +10,22 @@ export const metadata: Metadata = {
   referrer: "no-referrer",
 };
 
-/** One click from the email footer: opening the link unsubscribes, and the page offers an undo. */
+/**
+ * Opening the link only shows the page; unsubscribing takes the button (a server action).
+ * Gmail/Outlook link scanners pre-open links, so a GET must never unsubscribe anyone.
+ * Mail clients' one-click unsubscribe uses the POST route at /unsubscribe/one-click instead.
+ */
 export default async function UnsubscribePage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   await connection();
   const { token } = await searchParams;
-  const { outcome, email } = await unsubscribe(token);
+  const sub = await subscriptionByToken(token);
 
-  if (outcome === "invalid" || !email || typeof token !== "string") {
+  if (!sub || typeof token !== "string") {
     return (
       <NoticePage tone="warning" title="This link doesn't work">
         It may be incomplete. Use the unsubscribe link at the bottom of any diraBot email.
       </NoticePage>
     );
   }
-  return (
-    <NoticePage tone="neutral" title="You're unsubscribed" actions={<UndoUnsubscribe token={token} />}>
-      <span className="font-medium text-fg">{maskEmail(email)}</span> won&apos;t get diraBot alerts anymore.
-    </NoticePage>
-  );
+  return <UnsubscribeFlow token={token} who={maskEmail(sub.email)} subscribed={sub.status !== "unsubscribed"} canUndo={sub.confirmed} />;
 }

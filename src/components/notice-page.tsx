@@ -32,11 +32,14 @@ export function NoticePage({
   title,
   children,
   actions,
+  secondary = false,
 }: {
   tone: Tone;
   title: string;
   children: ReactNode;
   actions?: ReactNode;
+  /** Render "Browse listings" as a quiet outline button, when `actions` holds the primary one. */
+  secondary?: boolean;
 }) {
   return (
     <div className="flex min-h-dvh flex-col">
@@ -60,7 +63,11 @@ export function NoticePage({
             {actions}
             <Link
               href="/"
-              className="inline-flex h-10 items-center rounded-full bg-fg px-4 text-[13px] font-semibold text-bg transition-[scale,opacity] duration-150 hover:opacity-90 active:scale-[0.97]"
+              className={`inline-flex h-10 items-center rounded-full px-4 text-[13px] transition-[border-color,scale,opacity] duration-150 active:scale-[0.97] ${
+                secondary
+                  ? "border border-border bg-surface font-medium text-fg hover:border-border-strong"
+                  : "bg-fg font-semibold text-bg hover:opacity-90"
+              }`}
             >
               Browse listings
             </Link>

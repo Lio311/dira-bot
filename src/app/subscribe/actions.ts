@@ -1,7 +1,7 @@
 "use server";
 
 import { headers } from "next/headers";
-import { requestSubscription, resubscribe, type SubscribeResult } from "@/lib/subscriptions";
+import { requestSubscription, resubscribe, unsubscribe, type SubscribeResult } from "@/lib/subscriptions";
 
 /** Where links in emails point: DASHBOARD_URL, then Vercel's production domain, then the request's host. */
 async function baseUrl() {
@@ -25,8 +25,14 @@ export async function subscribeFromForm(_prev: SubscribeResult | null, form: For
   return subscribe(String(form.get("email") ?? ""));
 }
 
-/** "Changed my mind" on the unsubscribe page. */
-export async function resubscribeFromForm(token: string): Promise<{ ok: boolean }> {
+/** The unsubscribe page's button. Opening the page alone changes nothing. */
+export async function unsubscribeByToken(token: string): Promise<{ ok: boolean }> {
+  const { outcome } = await unsubscribe(token);
+  return { ok: outcome !== "invalid" };
+}
+
+/** "Undo" on the unsubscribe page. */
+export async function resubscribeByToken(token: string): Promise<{ ok: boolean }> {
   const { outcome } = await resubscribe(token);
   return { ok: outcome === "resubscribed" };
 }
