@@ -81,9 +81,12 @@ interface ApifyYad2Item {
 // When Radware challenges us, fall back to a managed Apify actor (paid per listing).
 async function viaApify(): Promise<RawListing[]> {
   const items = await runActor<ApifyYad2Item>(process.env.YAD2_ACTOR ?? "parsebird/yad2-real-estate-scraper", {
-    city: CITIES.map((c) => c.he).join(","),
+    // The paid fallback covers only the top-priority cities (Tel Aviv, Herzliya by default).
+    city: CITIES.filter((c) => c.priority <= Number(process.env.YAD2_APIFY_MAX_PRIORITY ?? 2))
+      .map((c) => c.he)
+      .join(","),
     dealType: "buy",
-    maxItems: Number(process.env.YAD2_APIFY_PER_CITY ?? 15),
+    maxItems: Number(process.env.YAD2_APIFY_PER_CITY ?? 10),
     minPrice: CRITERIA.minPrice,
     maxPrice: CRITERIA.maxPrice,
     minRooms: CRITERIA.minRooms,

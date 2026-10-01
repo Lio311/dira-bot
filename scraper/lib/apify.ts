@@ -62,3 +62,10 @@ export function apifySkipReason(): string | null {
   const hour = new Date().getUTCHours();
   return hour < 8 ? null : "Apify sources run once a day (00:00 UTC slot)";
 }
+
+/** For sources that only need to run every few days on top of the daily Apify slot. */
+export function everyNDaysSkipReason(days: number): string | null {
+  if (process.env.APIFY_EVERY_RUN === "1" || process.env.FORCE_APIFY === "1" || days <= 1) return null;
+  const day = Math.floor(Date.now() / 86_400_000);
+  return day % days === 0 ? null : `runs every ${days} days to stay inside the free Apify credit`;
+}

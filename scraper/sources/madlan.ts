@@ -30,7 +30,7 @@ export const madlan: Source = {
   key: "madlan",
   skip: apifySkipReason,
   async run() {
-    const perCity = Number(process.env.MADLAN_MAX_PER_CITY ?? 10);
+    const perCity = Number(process.env.MADLAN_MAX_PER_CITY ?? 8);
     const warnings: string[] = [];
     const listings: RawListing[] = [];
 
