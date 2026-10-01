@@ -24,6 +24,8 @@ export type CityKey =
   | "ramat-gan"
   | "savyon"
   | "kiryat-ono"
+  | "raanana"
+  | "ramat-hasharon"
   | "netanya";
 
 export interface City {
@@ -103,6 +105,26 @@ export const CITIES: City[] = [
     onmap: "קרית אונו",
     homeless: "קרית אונו",
     aliases: ["קרית אונו", "קריית אונו", "kiryat ono"],
+  },
+  {
+    key: "raanana",
+    name: "Raanana",
+    he: "רעננה",
+    priority: 3,
+    yad2: "8700",
+    onmap: "רעננה",
+    homeless: "רעננה",
+    aliases: ["רעננה", "raanana", "ra'anana"],
+  },
+  {
+    key: "ramat-hasharon",
+    name: "Ramat HaSharon",
+    he: "רמת השרון",
+    priority: 3,
+    yad2: "2650",
+    onmap: "רמת השרון",
+    homeless: "רמת השרון",
+    aliases: ["רמת השרון", "רמת-השרון", "רמה\"ש", "רמה״ש", "ramat hasharon", "ramat ha-sharon"],
   },
   {
     key: "netanya",

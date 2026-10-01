@@ -1,6 +1,6 @@
 # diraBot
 
-Finds 4–5 room apartments for sale between ₪2M and ₪4.5M in Tel Aviv, Herzliya, Givatayim, Ramat Gan, Savyon, Kiryat Ono and Netanya, ranks them by city priority, emails the new ones every 8 hours, and shows everything on a dashboard.
+Finds 4–5 room apartments for sale between ₪2M and ₪4.5M in Tel Aviv, Herzliya, Givatayim, Ramat Gan, Savyon, Kiryat Ono, Raanana, Ramat HaSharon and Netanya, ranks them by city priority, emails the new ones every 8 hours, and shows everything on a dashboard.
 
 ## How it fits together
 

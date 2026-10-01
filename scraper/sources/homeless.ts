@@ -10,6 +10,7 @@ import { BlockedError, type RawListing, type Source } from "../types";
 const ROTATION = [
   "tel-aviv", "herzliya", "tel-aviv", "ramat-gan", "tel-aviv", "givatayim",
   "tel-aviv", "kiryat-ono", "tel-aviv", "netanya", "tel-aviv", "savyon",
+  "tel-aviv", "raanana", "tel-aviv", "ramat-hasharon",
 ];
 
 function parsePrice(s: string) {
