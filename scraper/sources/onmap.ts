@@ -139,15 +139,17 @@ async function fetchPage(cityName: string, skip: number) {
 }
 
 /**
- * OnMap opens a listing only when the search path names an area: a bare
- * `/search/homes/buy?property=` redirects to the national map and drops the listing.
- * Centering on the listing's coordinates works for every city; the English city slug
- * is the fallback.
+ * OnMap opens a listing's panel only when the search path carries a map box:
+ * `/search/homes/buy/c_<sw-lat>,<sw-lng>/t_<ne-lat>,<ne-lng>/z_15?property=<slug>`.
+ * A bare `?property=`, a city slug alone, or a single center point all land on the
+ * search map with no listing open (checked against the live site).
  */
 function listingUrl(i: OnmapItem) {
   const loc = i.address?.location;
   if (loc?.lat != null && loc?.lon != null) {
-    return `https://www.onmap.co.il/search/homes/buy/c_${loc.lat},${loc.lon}/z_15?property=${i.slug}`;
+    const d = 0.004;
+    const box = `c_${(loc.lat - d).toFixed(6)},${(loc.lon - d).toFixed(6)}/t_${(loc.lat + d).toFixed(6)},${(loc.lon + d).toFixed(6)}`;
+    return `https://www.onmap.co.il/search/homes/buy/${box}/z_15?property=${i.slug}`;
   }
   const city = (i.address?.en?.city_name ?? "").toLowerCase().replace(/['’]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
   return `https://www.onmap.co.il/search/homes/buy${city ? `/${city}` : ""}?property=${i.slug}`;
