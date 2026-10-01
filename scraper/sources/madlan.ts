@@ -22,13 +22,15 @@ interface MadlanItem {
   images?: string[];
   hasAgent?: boolean;
   firstSeen?: string;
+  latitude?: number;
+  longitude?: number;
 }
 
 export const madlan: Source = {
   key: "madlan",
   skip: apifySkipReason,
   async run() {
-    const perCity = Number(process.env.MADLAN_MAX_PER_CITY ?? 10);
+    const perCity = Number(process.env.MADLAN_MAX_PER_CITY ?? 8);
     const warnings: string[] = [];
     const listings: RawListing[] = [];
 
@@ -55,6 +57,8 @@ export const madlan: Source = {
         sqm: i.areaSqm ?? null,
         floor: i.floor ?? null,
         price: i.price ?? null,
+        lat: i.latitude ?? null,
+        lng: i.longitude ?? null,
         images: i.images ?? [],
         isAgency: i.hasAgent ?? null,
         postedAt: i.firstSeen ? new Date(i.firstSeen) : null,

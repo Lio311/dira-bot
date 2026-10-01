@@ -19,7 +19,7 @@ export function relativeTime(iso: string | null | undefined, now = Date.now()): 
   if (h < 24) return `${h}h ago`;
   const d = Math.floor(h / 24);
   if (d < 30) return `${d}d ago`;
-  return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+  return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "Asia/Jerusalem" });
 }
 
 export const isFresh = (iso: string, hours = 24, now = Date.now()) =>

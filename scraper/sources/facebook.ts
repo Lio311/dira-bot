@@ -1,5 +1,5 @@
 import { CITIES, matchCity } from "../../src/lib/config";
-import { apifySkipReason, runActor } from "../lib/apify";
+import { apifySkipReason, everyNDaysSkipReason, runActor } from "../lib/apify";
 import { firstLine, isSalePost, parsePrice, parseRooms, parseSqm, textFingerprint } from "../lib/hebrew";
 import type { RawListing, Source } from "../types";
 
@@ -45,13 +45,17 @@ const groupUrls = () =>
 
 export const facebookGroups: Source = {
   key: "fb-group",
-  skip: () => apifySkipReason() ?? (groupUrls().length ? null : "FB_GROUP_URLS is empty"),
+  skip: () =>
+    apifySkipReason() ??
+    (groupUrls().length ? null : "FB_GROUP_URLS is empty") ??
+    everyNDaysSkipReason(Number(process.env.FB_EVERY_DAYS ?? 3)),
   async run() {
+    // resultsLimit applies per group, not per run. No onlyPostsNewerThan: the actor bills an
+    // extra event per post when it's set, and CHRONOLOGICAL + (source, id) dedupe covers it.
     const posts = await runActor<GroupPost>(GROUPS_ACTOR, {
       startUrls: groupUrls().map((url) => ({ url })),
-      resultsLimit: Number(process.env.FB_GROUP_POSTS ?? 150),
+      resultsLimit: Number(process.env.FB_POSTS_PER_GROUP ?? 3),
       viewOption: "CHRONOLOGICAL",
-      onlyPostsNewerThan: "3 days",
     });
 
     const listings: RawListing[] = [];

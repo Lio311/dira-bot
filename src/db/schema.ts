@@ -4,6 +4,7 @@ import {
   text,
   integer,
   real,
+  doublePrecision,
   timestamp,
   jsonb,
   uniqueIndex,
@@ -29,6 +30,8 @@ export const listings = pgTable(
     sqm: integer("sqm"),
     floor: integer("floor"),
     price: integer("price"),
+    lat: doublePrecision("lat"),
+    lng: doublePrecision("lng"),
     images: jsonb("images").$type<string[]>().notNull().default([]),
     /** Loose signature (city + street + rooms + sqm) used to spot the same flat on two sites. */
     fingerprint: text("fingerprint"),
@@ -58,6 +61,29 @@ export const scrapeRuns = pgTable("scrape_runs", {
   message: text("message"),
 });
 
+/**
+ * Cities added from the dashboard, on top of the built-in ones in src/lib/config.ts.
+ * Every field is derived from the CBS settlements list when the city is added.
+ */
+export const trackedCities = pgTable(
+  "tracked_cities",
+  {
+    id: serial("id").primaryKey(),
+    key: text("key").notNull(),
+    name: text("name").notNull(),
+    he: text("he").notNull(),
+    priority: integer("priority").notNull(),
+    /** CBS settlement code, which is also Yad2's city code. */
+    yad2Code: text("yad2_code").notNull(),
+    onmap: text("onmap").notNull(),
+    homeless: text("homeless").notNull(),
+    aliases: jsonb("aliases").$type<string[]>().notNull().default([]),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("tracked_cities_key_idx").on(t.key), uniqueIndex("tracked_cities_yad2_code_idx").on(t.yad2Code)],
+);
+
 export type Listing = typeof listings.$inferSelect;
 export type NewListing = typeof listings.$inferInsert;
 export type ScrapeRun = typeof scrapeRuns.$inferSelect;
+export type TrackedCity = typeof trackedCities.$inferSelect;

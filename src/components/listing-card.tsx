@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { memo, useState } from "react";
 import { CITY_BY_KEY, PRIORITY_LABEL, SOURCES, type CityKey, type Priority, type SourceKey } from "@/lib/config";
 import type { ListingView } from "@/lib/data";
 import { ils, ilsShort, isFresh, relativeTime } from "@/lib/format";
@@ -11,13 +11,15 @@ export const priorityVars = (p: number) => ({
   background: `var(--p${p}-soft)`,
 });
 
-export function PriorityBadge({ p, withCity }: { p: number; withCity?: string }) {
+export function PriorityBadge({ p, withCity, size = "md" }: { p: number; withCity?: string; size?: "sm" | "md" }) {
   return (
     <span
-      className="inline-flex h-[22px] items-center gap-1 rounded-full px-2 text-[11px] font-semibold tracking-[0.01em]"
+      className={`inline-flex w-fit shrink-0 items-center justify-self-start whitespace-nowrap rounded-full font-semibold tracking-[0.01em] ${
+        size === "sm" ? "h-5 gap-[5px] px-1.5 text-[10.5px]" : "h-[22px] gap-1 px-2 text-[11px]"
+      }`}
       style={priorityVars(p)}
     >
-      <span className="size-1.5 rounded-full bg-current" />
+      <span className={`${size === "sm" ? "size-[5px]" : "size-1.5"} rounded-full bg-current`} />
       {PRIORITY_LABEL[p as Priority]}
       {withCity && <span className="font-medium opacity-80">· {withCity}</span>}
     </span>
@@ -48,7 +50,20 @@ function PriceDrop({ l }: { l: ListingView }) {
   );
 }
 
-export function ListingCard({ l, now }: { l: ListingView; now: number }) {
+/** Memoized: the grid re-renders on every hover/filter tick, cards only when their own props change. */
+export const ListingCard = memo(function ListingCard({
+  l,
+  now,
+  onHover,
+  highlighted = false,
+}: {
+  l: ListingView;
+  now: number;
+  /** Reports pointer enter/leave (id / null), e.g. to light up the matching map pin. */
+  onHover?: (id: number | null) => void;
+  /** Accent ring, e.g. when the listing's map pin is hovered or selected. */
+  highlighted?: boolean;
+}) {
   const [imgOk, setImgOk] = useState(!!l.image);
   const perSqm = l.price && l.sqm ? Math.round(l.price / l.sqm) : null;
   const place = placeLine(l);
@@ -59,7 +74,13 @@ export function ListingCard({ l, now }: { l: ListingView; now: number }) {
       href={l.url}
       target="_blank"
       rel="noopener noreferrer"
-      className="group flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-[var(--shadow-card)] outline-none transition-[transform,box-shadow,border-color] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] hover:-translate-y-0.5 hover:border-border-strong hover:shadow-[var(--shadow-lift)] focus-visible:ring-2 focus-visible:ring-accent active:scale-[0.99]"
+      onMouseEnter={onHover && (() => onHover(l.id))}
+      onMouseLeave={onHover && (() => onHover(null))}
+      className={`group flex h-full flex-col overflow-hidden rounded-2xl border bg-surface outline-none transition-[translate,scale,box-shadow,border-color] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] hover:-translate-y-0.5 hover:shadow-[var(--shadow-lift)] focus-visible:ring-2 focus-visible:ring-accent active:scale-[0.99] ${
+        highlighted
+          ? "-translate-y-0.5 border-accent shadow-[var(--shadow-lift)] ring-1 ring-accent"
+          : "border-border shadow-[var(--shadow-card)] hover:border-border-strong"
+      }`}
     >
       <div className="relative aspect-[16/10] overflow-hidden">
         {imgOk ? (
@@ -128,7 +149,7 @@ export function ListingCard({ l, now }: { l: ListingView; now: number }) {
       </div>
     </a>
   );
-}
+});
 
 export function ListingRow({ l, now }: { l: ListingView; now: number }) {
   const perSqm = l.price && l.sqm ? Math.round(l.price / l.sqm) : null;
@@ -137,9 +158,9 @@ export function ListingRow({ l, now }: { l: ListingView; now: number }) {
       href={l.url}
       target="_blank"
       rel="noopener noreferrer"
-      className="group grid grid-cols-[auto_1fr_auto] items-center gap-x-4 gap-y-1 border-b border-border px-4 py-3 transition-colors duration-150 last:border-b-0 hover:bg-surface-2 md:grid-cols-[112px_130px_150px_1fr_110px_90px_20px]"
+      className="group grid grid-cols-[68px_1fr_auto] items-center gap-x-4 gap-y-1 border-b border-border px-4 py-3 transition-colors duration-150 last:border-b-0 hover:bg-surface-2 md:grid-cols-[68px_130px_150px_1fr_110px_90px_20px]"
     >
-      <PriorityBadge p={l.priority} />
+      <PriorityBadge p={l.priority} size="sm" />
       <span className="text-[15px] font-semibold tracking-[-0.01em] tabular md:order-none">{ils(l.price)}</span>
       <span className="hidden text-[13px] text-muted tabular md:block">
         {[l.rooms != null ? `${l.rooms} r` : null, l.sqm ? `${l.sqm} m²` : null, perSqm ? `${ilsShort(perSqm)}/m²` : null]

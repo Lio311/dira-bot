@@ -16,6 +16,7 @@ export const PRIORITY_LABEL: Record<Priority, string> = {
   4: "Low",
 };
 
+/** Keys of the built-in cities. Cities added from the dashboard use their own slugs. */
 export type CityKey =
   | "tel-aviv"
   | "herzliya"
@@ -26,17 +27,20 @@ export type CityKey =
   | "netanya";
 
 export interface City {
-  key: CityKey;
+  /** A CityKey for built-in cities, a slug for cities added from the dashboard. */
+  key: string;
   name: string;
   he: string;
   priority: Priority;
-  /** Yad2 numeric city code. */
+  /** Yad2 numeric city code (the CBS settlement code). */
   yad2: string;
   /** City name as OnMap's API and Homeless' URL expect it. */
   onmap: string;
   homeless: string;
   /** Spellings seen in free text (Facebook posts, Madlan). */
   aliases: string[];
+  /** Added from the dashboard (tracked_cities table) rather than built in. */
+  custom?: boolean;
 }
 
 export const CITIES: City[] = [
@@ -114,18 +118,62 @@ export const CITIES: City[] = [
 
 export const CITY_BY_KEY = Object.fromEntries(CITIES.map((c) => [c.key, c])) as Record<CityKey, City>;
 
+/**
+ * Built-in cities followed by the custom ones (skipping any that duplicate a built-in).
+ * Built-ins keep their order so scraping them works exactly as before; with no custom
+ * cities this returns CITIES itself.
+ */
+export function mergeCities(custom: readonly City[]): City[] {
+  if (!custom.length) return CITIES;
+  const taken = new Set(CITIES.flatMap((c) => [c.key, c.yad2]));
+  const extra = custom
+    .filter((c) => !taken.has(c.key) && !taken.has(c.yad2))
+    .sort((a, b) => a.priority - b.priority);
+  return [...CITIES, ...extra];
+}
+
 const normalizeText = (s: string) =>
   s.toLowerCase().replace(/[֑-ׇ]/g, "").replace(/\s+/g, " ").trim();
 
-const ALIAS_PAIRS = CITIES.flatMap((c) => c.aliases.map((a) => [normalizeText(a), c] as const)).sort(
-  (a, b) => b[0].length - a[0].length,
-);
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+interface AliasEntry {
+  alias: string;
+  city: City;
+  /**
+   * Custom cities match on word boundaries (allowing Hebrew prefix letters such as
+   * ב/ל/מ), so a short name like "גת" doesn't fire inside "קרית גת". Built-ins keep
+   * plain substring matching.
+   */
+  re: RegExp | null;
+}
+
+const aliasIndexes = new WeakMap<readonly City[], AliasEntry[]>();
+
+function aliasIndex(cities: readonly City[]): AliasEntry[] {
+  let index = aliasIndexes.get(cities);
+  if (!index) {
+    index = cities
+      .flatMap((c) =>
+        c.aliases.map((a) => {
+          const alias = normalizeText(a);
+          const re = c.custom
+            ? new RegExp(`(?:^|[^\\p{L}\\p{N}])[ובכלמשה]{0,3}${escapeRe(alias)}(?![\\p{L}\\p{N}])`, "u")
+            : null;
+          return { alias, city: c, re };
+        }),
+      )
+      .sort((a, b) => b.alias.length - a.alias.length);
+    aliasIndexes.set(cities, index);
+  }
+  return index;
+}
 
 /** Resolve a free-text city name to a tracked city; longer aliases win. */
-export function matchCity(text: string | null | undefined): City | null {
+export function matchCity(text: string | null | undefined, cities: readonly City[] = CITIES): City | null {
   if (!text) return null;
   const t = normalizeText(text);
-  for (const [alias, city] of ALIAS_PAIRS) if (t.includes(alias)) return city;
+  for (const { alias, city, re } of aliasIndex(cities)) if (re ? re.test(t) : t.includes(alias)) return city;
   return null;
 }
 
