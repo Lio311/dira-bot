@@ -18,6 +18,7 @@ import type { FeatureKey } from "@/db/schema";
 import { CRITERIA, SOURCES, type SourceKey } from "@/lib/config";
 import type { CityView, ListingView, SourceStatus } from "@/lib/data";
 import { ilsShort, isFresh, relativeTime } from "@/lib/format";
+import { isMotivated } from "@/lib/price-history";
 import { AddCityButton } from "./add-city";
 import { AMENITIES, AmenityIcon, amenityTitle } from "./amenities";
 import { buildHistogram, Chip, RangeSlider, Segmented, Select, Toggle, ToggleGroup } from "./controls";
@@ -49,6 +50,7 @@ type Sort =
   | "floor-asc"
   | "floor-desc"
   | "drop"
+  | "cuts"
   | "starred"
   | "changed";
 
@@ -63,6 +65,7 @@ const SORTS: { value: Sort; label: string }[] = [
   { value: "floor-asc", label: "Floor ↑" },
   { value: "floor-desc", label: "Floor ↓" },
   { value: "drop", label: "Biggest price drop" },
+  { value: "cuts", label: "Most price cuts" },
   { value: "starred", label: "Starred first" },
   { value: "changed", label: "Recently changed" },
 ];
@@ -107,6 +110,8 @@ function sortListings(list: ListingView[], sort: Sort) {
       return sorted.sort(by((l) => l.floor, -1));
     case "drop":
       return sorted.sort(by(dropOf, -1));
+    case "cuts": // motivated sellers first, then by how far the price fell
+      return sorted.sort(by((l) => (l.priceCuts ? l.priceCuts * 1e9 + (dropOf(l) ?? 0) : null), -1));
     case "starred": // most recently starred first, then the rest by priority
       return sorted.sort((a, b) => (b.starredAt ?? "").localeCompare(a.starredAt ?? "") || a.priority - b.priority || byNewest(a, b));
     case "changed":
@@ -148,8 +153,8 @@ const FLAG_KEYS = Object.keys(FLAGS) as FlagKey[];
 /** Posted within N days (0 = any time). */
 type Posted = 0 | 1 | 3 | 7 | 30;
 
-/** Price changed vs the first known price. */
-type PriceMove = "any" | "down" | "up";
+/** Price changed vs the first known price; "motivated" = cut twice or deeply (isMotivated). */
+type PriceMove = "any" | "down" | "motivated" | "up";
 const movedOf = (l: ListingView): PriceMove | null => (l.priceChange == null || l.priceChange === 0 ? null : l.priceChange < 0 ? "down" : "up");
 
 type Filters = {
@@ -233,7 +238,7 @@ function buildMatcher(f: Filters, q: string, now: number, bounds: Record<RangeKe
     if (r) tests.push([d.key, (l) => inRange(d.get(l), r, bounds[d.key])]);
   }
   if (f.posted) tests.push(["posted", (l) => now - postedTime(l) < f.posted * 86_400_000]);
-  if (f.priceMove !== "any") tests.push(["priceMove", (l) => movedOf(l) === f.priceMove]);
+  if (f.priceMove !== "any") tests.push(["priceMove", (l) => (f.priceMove === "motivated" ? isMotivated(l) : movedOf(l) === f.priceMove)]);
   if (f.amenities.length) tests.push(["amenities", (l) => f.amenities.every((k) => l.features[k] === true)]);
   for (const k of FLAG_KEYS) if (f[k]) tests.push([k, (l) => FLAGS[k].test(l, now)]);
   if (q) tests.push(["q", (l) => [l.street, l.neighborhood, l.title, l.description].some((x) => x?.toLowerCase().includes(q))]);
@@ -364,11 +369,12 @@ export function Dashboard({
     const rooms = new Map<number, number>();
     const types = new Map<string, number>();
     let starred = 0;
-    const moves: Record<PriceMove, number> = { any: listings.length, down: 0, up: 0 };
+    const moves: Record<PriceMove, number> = { any: listings.length, down: 0, motivated: 0, up: 0 };
     for (const l of listings) {
       if (l.starredAt) starred++;
       const m = movedOf(l);
       if (m) moves[m]++;
+      if (isMotivated(l)) moves.motivated++;
       cities.set(l.city, (cities.get(l.city) ?? 0) + 1);
       if (l.rooms != null) rooms.set(l.rooms, (rooms.get(l.rooms) ?? 0) + 1);
       const t = typeOf(l);
@@ -537,6 +543,7 @@ export function Dashboard({
             [
               ["any", "Any"],
               ["down", "Dropped"],
+              ["motivated", "Motivated"],
               ["up", "Increased"],
             ] as const
           ).map(([value, label]) => ({
@@ -682,6 +689,20 @@ export function Dashboard({
                     className="underline-offset-4 transition-[color,scale] duration-150 hover:text-fg hover:underline active:scale-[0.97]"
                   >
                     {plural(stats.changedThisWeek, "price change")} this week
+                  </button>
+                </>
+              )}
+              {counts.moves.motivated > 0 && scope === "active" && filters.priceMove !== "motivated" && (
+                <>
+                  {" · "}
+                  <button
+                    type="button"
+                    onClick={() => update({ priceMove: "motivated" })}
+                    title="Price cut twice or by 5%+: show only these"
+                    className="font-medium underline-offset-4 transition-[color,scale] duration-150 hover:underline active:scale-[0.97]"
+                    style={{ color: "var(--hot)" }}
+                  >
+                    {plural(counts.moves.motivated, "motivated seller")}
                   </button>
                 </>
               )}

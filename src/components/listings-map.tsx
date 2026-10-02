@@ -18,8 +18,9 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalS
 import { cityName, SOURCES, type SourceKey } from "@/lib/config";
 import type { ListingView } from "@/lib/data";
 import { ils, ilsShort } from "@/lib/format";
+import { isMotivated, motivatedReasonLong } from "@/lib/price-history";
 import { STAR_PATH, useStarToggle } from "./favorites";
-import { priceChangeHint } from "./price-history";
+import { motivatedHint, priceChangeHint } from "./price-history";
 
 export interface ListingsMapProps {
   listings: ListingView[]; // the currently filtered listings (some have lat/lng null)
@@ -267,6 +268,11 @@ function buildPopupContent(
     was.append(delta, document.createTextNode(` · ${hint}`));
     was.title = hint;
     body.append(was);
+  }
+  if (isMotivated(l)) {
+    const hot = h("div", "lm-card-hot", `Motivated seller · ${motivatedReasonLong(l)}`);
+    hot.title = motivatedHint(l);
+    body.append(hot);
   }
 
   const facts = factsOf(l);

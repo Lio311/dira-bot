@@ -14,6 +14,8 @@ export interface PriceEntry {
   at: string;
   source?: "site";
   undated?: true;
+  /** The first reading of a new ad for a flat whose earlier ad was taken down; the entries before it came from that ad. */
+  relisted?: true;
 }
 
 /** Site-reported price as a source adapter returns it; `at` null = the site gives no date. */
@@ -76,6 +78,39 @@ export function pricePoints(history: readonly PriceEntry[]): PriceEntry[] {
   return out;
 }
 
+/** A motivated seller: cut the price this many times, */
+export const MOTIVATED_CUTS = 2;
+/** or by at least this share of the first known price (one deep cut is enough). */
+export const MOTIVATED_DROP = 0.05;
+
+/** How many times the price went down, over the whole history. */
+export function countCuts(history: readonly PriceEntry[]): number {
+  const pts = pricePoints(history);
+  let cuts = 0;
+  for (let i = 1; i < pts.length; i++) if (pts[i].price < pts[i - 1].price) cuts++;
+  return cuts;
+}
+
+type PriceFacts = { price: number | null; priceCuts: number; priceChange: number | null };
+
+/** How far the price fell from the first known price, as a share (0.07 = 7%); 0 when it didn't fall. */
+export const dropShare = (l: PriceFacts) =>
+  l.price != null && l.priceChange != null && l.priceChange < 0 ? -l.priceChange / (l.price - l.priceChange) : 0;
+
+/**
+ * Still below the first known price (a rise back past it cancels the signal), after MOTIVATED_CUTS
+ * cuts or a drop of MOTIVATED_DROP or more.
+ */
+export const isMotivated = (l: PriceFacts) => dropShare(l) > 0 && (l.priceCuts >= MOTIVATED_CUTS || dropShare(l) >= MOTIVATED_DROP);
+
+/** Why a listing counts as motivated, short: "3 cuts" or "−7%". */
+export const motivatedReason = (l: PriceFacts) =>
+  l.priceCuts >= MOTIVATED_CUTS ? `${l.priceCuts} cuts` : `−${Math.round(dropShare(l) * 100)}%`;
+
+/** The same, spelled out: "3 price cuts" or "price cut 7%". */
+export const motivatedReasonLong = (l: PriceFacts) =>
+  l.priceCuts >= MOTIVATED_CUTS ? `${l.priceCuts} price cuts` : `price cut ${Math.round(dropShare(l) * 100)}%`;
+
 export interface PriceSummary {
   /** The last `keep` points, oldest first; empty when the price never changed. */
   points: PriceEntry[];
@@ -85,11 +120,13 @@ export interface PriceSummary {
   changedAt: string | null;
   /** The price before the latest change. */
   previous: number | null;
+  /** Price cuts over the whole history (not just the kept points). */
+  cuts: number;
 }
 
 export function summarizePrices(history: readonly PriceEntry[], keep = 12): PriceSummary {
   const pts = pricePoints(history);
-  if (pts.length < 2) return { points: [], change: null, changedAt: null, previous: null };
+  if (pts.length < 2) return { points: [], change: null, changedAt: null, previous: null, cuts: 0 };
   const last = pts[pts.length - 1];
   const before = pts[pts.length - 2];
   return {
@@ -97,5 +134,6 @@ export function summarizePrices(history: readonly PriceEntry[], keep = 12): Pric
     change: last.price - pts[0].price,
     changedAt: before.undated ? null : last.at,
     previous: before.price,
+    cuts: countCuts(pts),
   };
 }

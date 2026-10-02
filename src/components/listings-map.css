@@ -273,6 +273,13 @@
   color: var(--rise);
 }
 
+.lm-card-hot {
+  margin-top: 2px;
+  color: var(--hot);
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .lm-card-facts {
   margin-top: 2px;
   color: var(--muted);

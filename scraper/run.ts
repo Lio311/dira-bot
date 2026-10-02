@@ -10,7 +10,7 @@ import { getCities } from "../src/lib/cities";
 import { CITIES } from "../src/lib/config";
 import { closeBrowser } from "./lib/browser";
 import { renderEmail, sendEmail } from "./lib/email";
-import { normalize, saveListings, type Normalized, type PriceChange } from "./lib/store";
+import { normalize, promoteLiveDuplicates, saveListings, type Normalized, type PriceChange } from "./lib/store";
 import { sendToSubscribers } from "./lib/subscribers";
 import { verifyRemoved } from "./lib/verify-removed";
 import { yad2 } from "./sources/yad2";
@@ -99,6 +99,10 @@ async function main() {
   }
   // Confirm take-downs of listings the scrapes stopped seeing (their own pages, gently).
   if (db && !noVerify) await verifyRemoved(db, sources.map((s) => s.key));
+  if (db) {
+    const promoted = await promoteLiveDuplicates(db).catch((e) => (log(`promote duplicates: ${(e as Error).message}`), 0));
+    if (promoted) log(`${promoted} taken-down listing${promoted === 1 ? "" : "s"} still live on another site, kept on the board`);
+  }
   await closeBrowser();
 
   if (dry) {

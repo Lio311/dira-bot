@@ -1,6 +1,7 @@
 import { CITIES, cityName, PRIORITY_LABEL, SOURCES, type City, type Priority, type SourceKey } from "../../src/lib/config";
 import type { Listing } from "../../src/db/schema";
 import { getMailer } from "../../src/lib/mailer";
+import { countCuts, isMotivated, pricePoints } from "../../src/lib/price-history";
 import type { PriceChange } from "./store";
 
 const MAX_ROWS = 40;
@@ -36,6 +37,24 @@ function row(l: Listing, cities: readonly City[], note?: string) {
       </td>
     </tr></table>
   </td></tr>`;
+}
+
+const ordinal = (n: number) => `${n}${n % 10 === 1 && n !== 11 ? "st" : n % 10 === 2 && n !== 12 ? "nd" : n % 10 === 3 && n !== 13 ? "rd" : "th"}`;
+
+/** "↓ from ₪3.2M · 3rd cut · motivated seller" */
+function dropNote(d: PriceChange) {
+  const { price, priceHistory } = d.listing;
+  const cuts = countCuts(priceHistory);
+  const first = pricePoints(priceHistory)[0]?.price;
+  const motivated = price != null && first != null && isMotivated({ price, priceCuts: cuts, priceChange: price - first });
+  return [`↓ from ${ils(d.from)}`, cuts > 1 && `${ordinal(cuts)} cut`, motivated && "motivated seller"].filter(Boolean).join(" · ");
+}
+
+/** A new ad for a flat whose earlier ad was taken down: "Relisted · was ₪3.2M". */
+function relistNote(l: Listing) {
+  const pts = pricePoints(l.priceHistory);
+  const i = pts.findIndex((p) => p.relisted);
+  return i > 0 ? `Relisted · was ${ils(pts[i - 1].price)}` : undefined;
 }
 
 /** Price increases: one compact line each, below the main list. */
@@ -79,8 +98,8 @@ export function renderEmail(
       </td></tr>
       <tr><td style="padding:0 28px">
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-          ${drops.map((d) => row(d.listing, cities, `↓ from ${ils(d.from)}`)).join("")}
-          ${shown.map((l) => row(l, cities)).join("")}
+          ${drops.map((d) => row(d.listing, cities, dropNote(d))).join("")}
+          ${shown.map((l) => row(l, cities, relistNote(l))).join("")}
         </table>
         ${sorted.length > MAX_ROWS ? `<p style="font-size:13px;color:#57534e;margin:16px 0 0">+${sorted.length - MAX_ROWS} more on the dashboard.</p>` : ""}
         ${

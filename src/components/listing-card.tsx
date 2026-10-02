@@ -7,7 +7,7 @@ import { ils, ilsShort, isFresh, relativeTime } from "@/lib/format";
 import { AmenityList } from "./amenities";
 import { StarButton } from "./favorites";
 import { LogoMark } from "./logo";
-import { PriceChangeBadge } from "./price-history";
+import { MotivatedBadge, PriceChangeBadge } from "./price-history";
 
 export const priorityVars = (p: number) => ({
   color: `var(--p${p})`,
@@ -117,10 +117,11 @@ export const ListingCard = memo(function ListingCard({
             >
               {removedLabel(l, now)}
             </span>
-          ) : fresh && (
-            <span className="absolute bottom-2.5 left-2.5 rounded-full bg-accent px-2 py-0.5 text-[11px] font-semibold text-accent-fg shadow-sm">
-              New
-            </span>
+          ) : (
+            <div className="absolute bottom-2.5 left-2.5 flex items-center gap-1.5">
+              {fresh && <span className="rounded-full bg-accent px-2 py-0.5 text-[11px] font-semibold text-accent-fg shadow-sm">New</span>}
+              <MotivatedBadge l={l} variant="overlay" />
+            </div>
           )}
         </div>
 
@@ -187,6 +188,7 @@ export function ListingRow({ l, now }: { l: ListingView; now: number }) {
         <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
           <span className="text-[15px] font-semibold tracking-[-0.01em] tabular">{ils(l.price)}</span>
           <PriceChangeBadge l={l} now={now} size="sm" className="relative z-[2]" />
+          <MotivatedBadge l={l} className="relative z-[2]" />
         </span>
         {removed && (
           <span title={removedHint(l)} className="relative z-[2] whitespace-nowrap rounded-full bg-surface-2 px-2 py-0.5 text-[11px] font-medium text-muted md:hidden">

@@ -17,10 +17,11 @@ import { createPortal } from "react-dom";
 import { SOURCES, type SourceKey } from "@/lib/config";
 import type { ListingView } from "@/lib/data";
 import { ils, ilsShort, relativeTime } from "@/lib/format";
-import type { PriceEntry } from "@/lib/price-history";
+import { isMotivated, motivatedReason, motivatedReasonLong, type PriceEntry } from "@/lib/price-history";
 
 const EASE: [number, number, number, number] = [0.23, 1, 0.32, 1];
-const WIDTH = 288;
+const WIDTH = 320;
+const DAY = 86_400_000;
 const GUTTER = 16;
 
 type Dir = "down" | "up" | "flat";
@@ -46,6 +47,39 @@ export function priceChangeHint(l: Pick<ListingView, "price" | "priceChange" | "
   if (l.priceChange == null || l.price == null) return null;
   const was = `Was ${ilsShort(l.price - l.priceChange)}`;
   return l.priceChangedAt ? `${was} · changed ${relativeTime(l.priceChangedAt, now)}` : `${was} · per ${sourceName(l.source)}`;
+}
+
+export const motivatedHint = (l: ListingView) => `Motivated seller (${motivatedReasonLong(l)}): may be open to an offer`;
+
+/** Down-stepping line: the "kept cutting" mark. */
+function CutsIcon({ className = "" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 12 12" fill="none" aria-hidden className={className}>
+      <path d="M1.5 3h2.5v2.5h2.5V8h2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M8 10h2.5V7.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+/**
+ * Marks a motivated seller (see isMotivated): "Motivated · 3 cuts" / "Motivated · −7%".
+ * `overlay` sits on a photo (solid), `inline` next to a price (soft).
+ */
+export function MotivatedBadge({ l, variant = "inline", className = "" }: { l: ListingView; variant?: "overlay" | "inline"; className?: string }) {
+  if (!isMotivated(l)) return null;
+  return (
+    <span
+      title={motivatedHint(l)}
+      aria-label={`Motivated seller: ${motivatedReasonLong(l)}`}
+      style={variant === "overlay" ? { color: "var(--hot-fg)", background: "var(--hot)" } : { color: "var(--hot)", background: "var(--hot-soft)" }}
+      className={`inline-flex shrink-0 items-center gap-1 whitespace-nowrap font-semibold ${
+        variant === "overlay" ? "h-[22px] rounded-full px-2 text-[11px] shadow-sm" : "h-5 rounded-md px-1.5 text-[11px]"
+      } ${className}`}
+    >
+      <CutsIcon className="size-3" />
+      {variant === "overlay" ? `Motivated · ${motivatedReason(l)}` : motivatedReason(l)}
+    </span>
+  );
 }
 
 /**
@@ -245,7 +279,13 @@ function PriceHistoryPanel({ l, now }: { l: ListingView; now: number }) {
           {dir !== "flat" && <span className="ml-1 font-medium opacity-80">({Math.abs(pct).toFixed(pct && Math.abs(pct) < 1 ? 1 : 0)}%)</span>}
         </span>
       </div>
-      <Sparkline points={points} />
+      {isMotivated(l) && (
+        <p className="-mt-1.5 flex items-center gap-1.5 text-[12px] font-medium" style={{ color: "var(--hot)" }}>
+          <CutsIcon className="size-3.5 shrink-0" />
+          Motivated seller · {motivatedReasonLong(l)}
+        </p>
+      )}
+      <PriceChart points={points} now={now} />
       <ol className="-mx-1 flex max-h-[220px] flex-col overflow-y-auto overscroll-contain">
         {rows.map(({ p, delta }, i) => (
           <li key={`${p.at}-${p.price}`} className={`flex items-center justify-between gap-3 rounded-lg px-1 py-1.5 ${i === 0 ? "" : "border-t border-border"}`}>
@@ -254,7 +294,11 @@ function PriceHistoryPanel({ l, now }: { l: ListingView; now: number }) {
                 {p.undated ? "Earlier" : fmtDate(p.at, now)}
                 {i === 0 && <span className="ml-1 font-normal text-faint">· now</span>}
               </span>
-              {p.source === "site" && <span className="block text-[11px] text-faint">per {site}</span>}
+              {p.relisted ? (
+                <span className="block text-[11px] text-faint">relisted as a new ad</span>
+              ) : (
+                p.source === "site" && <span className="block text-[11px] text-faint">per {site}</span>
+              )}
             </span>
             <span className="flex shrink-0 items-baseline gap-2 tabular">
               <span className={`text-[13px] ${i === 0 ? "font-semibold" : "text-fg/80"}`}>{ils(p.price)}</span>
@@ -269,36 +313,139 @@ function PriceHistoryPanel({ l, now }: { l: ListingView; now: number }) {
   );
 }
 
-/** Step line: the price holds until the next change. One dot per change; the line runs on to "now". */
-function Sparkline({ points }: { points: PriceEntry[] }) {
-  const W = 260;
-  const H = 52;
-  const PAD = 6;
+/**
+ * Price over time: a step line (the price holds until the next change) on a real time axis that
+ * runs on to today, one dot per change. Undated site entries have no place on the axis, so they
+ * sit in a narrow slot at the left joined by a dashed line. Hover, or focus and use the arrow keys,
+ * for a crosshair readout; the list below the chart is the full table.
+ */
+function PriceChart({ points, now }: { points: PriceEntry[]; now: number }) {
+  const [active, setActive] = useState<number | null>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
   if (points.length < 2) return null;
+
+  const W = WIDTH - 28; // popover width minus its padding
+  const H = 128;
+  const [L, R, T, B] = [6, 48, 10, 22]; // R holds the price labels, B the dates
+  const firstDated = Math.max(0, points.findIndex((p) => !p.undated));
+  const slot = firstDated > 0 ? 26 : 0;
+  const t0 = new Date(points[firstDated].at).getTime();
+  const tEnd = Math.max(now, new Date(points[points.length - 1].at).getTime());
+  const span = Math.max(tEnd - t0, DAY);
+  const x = (i: number) =>
+    i < firstDated ? L + (slot * i) / firstDated : L + slot + ((new Date(points[i].at).getTime() - t0) / span) * (W - R - L - slot);
+
   const prices = points.map((p) => p.price);
   const min = Math.min(...prices);
   const max = Math.max(...prices);
-  const span = max - min || 1;
-  // Evenly spaced: undated site entries have no real position on a time axis.
-  const step = (W - PAD * 2) / (points.length - 0.4);
-  const x = (i: number) => PAD + i * step;
-  const y = (v: number) => PAD + (1 - (v - min) / span) * (H - PAD * 2);
-  let d = `M${x(0)},${y(prices[0])}`;
-  for (let i = 1; i < points.length; i++) d += `H${x(i)}V${y(prices[i])}`;
-  d += `H${W - PAD}`;
-  const area = `${d}V${H}H${x(0)}Z`;
+  const pad = (max - min) * 0.14;
+  const y = (v: number) => T + (1 - (v - (min - pad)) / (max - min + pad * 2)) * (H - T - B);
+
+  let pre = "";
+  if (firstDated > 0) {
+    pre = `M${x(0)},${y(prices[0])}`;
+    for (let i = 1; i < firstDated; i++) pre += `H${x(i)}V${y(prices[i])}`;
+    pre += `H${x(firstDated)}`;
+  }
+  let line = firstDated > 0 ? `M${x(firstDated)},${y(prices[firstDated - 1])}V${y(prices[firstDated])}` : `M${x(0)},${y(prices[0])}`;
+  for (let i = firstDated + 1; i < points.length; i++) line += `H${x(i)}V${y(prices[i])}`;
+  line += `H${W - R}`;
+  const area = `${pre ? pre + line.replace(/^M[^V]*/, "") : line}V${H - B}H${x(0)}Z`;
+
+  const nearest = (clientX: number) => {
+    const box = svgRef.current?.getBoundingClientRect();
+    if (!box) return null;
+    const px = ((clientX - box.left) / box.width) * W;
+    let best = 0;
+    for (let i = 1; i < points.length; i++) if (Math.abs(x(i) - px) < Math.abs(x(best) - px)) best = i;
+    return best;
+  };
+
+  const first = points[0];
+  const last = points[points.length - 1];
+  const summary = `Price chart: ${ils(first.price)}${first.undated ? " earlier" : ` on ${fmtDate(first.at, now)}`}, now ${ils(last.price)}, ${points.length - 1} change${points.length === 2 ? "" : "s"}.`;
+  const a = active == null ? null : points[active];
+  const delta = active ? points[active].price - points[active - 1].price : null;
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="block h-auto w-full overflow-visible" aria-hidden>
-      <path d={area} fill="var(--accent)" opacity="0.08" />
-      <path d={d} fill="none" stroke="var(--accent)" strokeWidth="1.75" strokeLinejoin="round" strokeLinecap="round" />
-      {points.map((p, i) =>
-        i === 0 ? (
-          <circle key={i} cx={x(i)} cy={y(p.price)} r="2.5" fill="var(--surface)" stroke="var(--accent)" strokeWidth="1.5" />
-        ) : (
-          <circle key={i} cx={x(i)} cy={y(p.price)} r={i === points.length - 1 ? 3.5 : 2.75} fill="var(--accent)" stroke="var(--surface)" strokeWidth="1.5" />
-        ),
+    <div className="relative">
+      <svg
+        ref={svgRef}
+        viewBox={`0 0 ${W} ${H}`}
+        className="block h-auto w-full touch-pan-y overflow-visible rounded-md outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        role="img"
+        aria-label={summary}
+        tabIndex={0}
+        onPointerMove={(e) => setActive(nearest(e.clientX))}
+        onPointerDown={(e) => setActive(nearest(e.clientX))}
+        onPointerLeave={(e) => e.pointerType === "mouse" && setActive(null)}
+        onFocus={() => setActive((i) => i ?? points.length - 1)}
+        onBlur={() => setActive(null)}
+        onKeyDown={(e) => {
+          if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+          e.preventDefault();
+          const step = e.key === "ArrowLeft" ? -1 : 1;
+          setActive((i) => Math.max(0, Math.min(points.length - 1, (i ?? points.length - 1) + step)));
+        }}
+      >
+        {/* Hairlines at the highest and lowest price, labelled on the right. */}
+        {[max, min].map((v) => (
+          <g key={v}>
+            <line x1={L} x2={W - R} y1={y(v)} y2={y(v)} stroke="var(--border)" strokeWidth="1" />
+            <text x={W - R + 6} y={y(v)} dy="0.35em" fontSize="10" fill="var(--muted)" className="tabular">
+              {ilsShort(v)}
+            </text>
+          </g>
+        ))}
+        <line x1={L} x2={W - R} y1={H - B} y2={H - B} stroke="var(--border-strong)" strokeWidth="1" />
+        <text x={x(firstDated)} y={H - B + 14} fontSize="10" fill="var(--faint)" textAnchor={firstDated > 0 ? "middle" : "start"}>
+          {fmtDate(points[firstDated].at, now)}
+        </text>
+        <text x={W - R} y={H - B + 14} fontSize="10" fill="var(--faint)" textAnchor="end">
+          Today
+        </text>
+
+        <path d={area} fill="var(--accent)" opacity="0.1" />
+        {pre && <path d={pre} fill="none" stroke="var(--accent)" strokeWidth="2" strokeDasharray="3 3" strokeLinecap="round" strokeLinejoin="round" />}
+        <path d={line} fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+
+        {active != null && <line x1={x(active)} x2={x(active)} y1={T - 4} y2={H - B} stroke="var(--muted)" strokeWidth="1" opacity="0.6" />}
+        {points.map((p, i) => (
+          <circle
+            key={`${p.at}-${p.price}`}
+            cx={x(i)}
+            cy={y(p.price)}
+            r={i === active ? 5 : 4}
+            fill={p.relisted ? "var(--surface)" : "var(--accent)"}
+            stroke={p.relisted ? "var(--accent)" : "var(--surface)"}
+            strokeWidth="2"
+          />
+        ))}
+      </svg>
+      {a && (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -top-1 z-10 rounded-lg border border-border bg-surface px-2 py-1.5 text-[11px] leading-tight whitespace-nowrap shadow-[var(--shadow-lift)]"
+          style={{
+            left: `${(x(active!) / W) * 100}%`,
+            transform: `translate(${x(active!) < W * 0.3 ? "-12%" : x(active!) > W * 0.7 ? "-88%" : "-50%"}, -100%)`,
+          }}
+        >
+          <span className="block text-muted">
+            {a.undated ? "Earlier" : fmtDate(a.at, now)}
+            {a.relisted && " · relisted"}
+            {active === points.length - 1 && " · current"}
+          </span>
+          <span className="flex items-baseline gap-1.5 tabular">
+            <span className="text-[12.5px] font-semibold text-fg">{ils(a.price)}</span>
+            {delta != null && (
+              <span className="font-semibold" style={{ color: TONE[dirOf(delta)].color }}>
+                {ARROW[dirOf(delta)]} {ilsShort(Math.abs(delta))}
+              </span>
+            )}
+          </span>
+        </div>
       )}
-    </svg>
+    </div>
   );
 }

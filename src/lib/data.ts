@@ -39,6 +39,8 @@ export interface ListingView {
   priceChange: number | null;
   /** When the latest change happened; null when none, or unknown (only the site's undated "price before"). */
   priceChangedAt: string | null;
+  /** How many times the price went down; see isMotivated. */
+  priceCuts: number;
   /** Set when the ad was confirmed taken down ("Not relevant" on the dashboard). */
   removedAt: string | null;
   /** When the owner starred it (favorites); null = not starred. */
@@ -94,7 +96,7 @@ export async function getDashboardData() {
     db
       .select({ duplicateOf: listings.duplicateOf, source: listings.source, url: listings.url })
       .from(listings)
-      .where(and(isNotNull(listings.duplicateOf), gt(listings.lastSeenAt, since))),
+      .where(and(isNotNull(listings.duplicateOf), isNull(listings.removedAt), gt(listings.lastSeenAt, since))),
     // Latest finished run per source.
     db
       .selectDistinctOn([scrapeRuns.source])
@@ -135,6 +137,7 @@ export async function getDashboardData() {
       priceHistory: prices.points,
       priceChange: prices.change,
       priceChangedAt: prices.changedAt,
+      priceCuts: prices.cuts,
       removedAt: l.removedAt?.toISOString() ?? null,
       starredAt: l.starredAt?.toISOString() ?? null,
       alsoOn: (alsoOn.get(l.id) ?? []).map((d) => ({ source: d.source, url: d.url })),
