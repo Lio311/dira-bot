@@ -7,6 +7,7 @@ import {
   useCallback,
   useDeferredValue,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -979,7 +980,25 @@ function MoreFilters({
   children: ReactNode;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const reduce = useReducedMotion();
+  // How far the panel slides left of its trigger so it never pokes past the viewport's 16px gutter.
+  const [shift, setShift] = useState(0);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    const place = () => {
+      const anchor = ref.current;
+      const panel = panelRef.current;
+      if (!anchor || !panel) return;
+      const left = anchor.getBoundingClientRect().left;
+      const room = document.documentElement.clientWidth - 16 - panel.offsetWidth;
+      setShift(Math.max(16 - left, Math.min(0, room - left)));
+    };
+    place();
+    window.addEventListener("resize", place);
+    return () => window.removeEventListener("resize", place);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -1001,14 +1020,16 @@ function MoreFilters({
       <AnimatePresence>
         {open && (
           <motion.div
+            ref={panelRef}
             role="dialog"
             aria-label="More filters"
             initial={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.97, y: -4 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.97, y: -4 }}
             transition={{ duration: 0.18, ease: EASE }}
-            style={{ transformOrigin: "top left" }}
-            className="absolute left-0 top-[calc(100%+8px)] z-40 flex max-h-[calc(100dvh_-_var(--map-top)_-_8px)] w-[420px] max-w-[calc(100vw-32px)] flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-[var(--shadow-lift)]"
+            // Grow from the trigger's corner even when the panel has been shifted left.
+            style={{ left: shift, transformOrigin: `${-shift}px 0` }}
+            className="absolute top-[calc(100%+8px)] z-40 flex max-h-[calc(100dvh_-_var(--map-top)_-_8px)] w-[420px] max-w-[calc(100vw-32px)] flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-[var(--shadow-lift)]"
           >
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5">{children}</div>
             <div className="flex shrink-0 items-center justify-between border-t border-border px-5 py-3">
