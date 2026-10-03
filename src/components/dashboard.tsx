@@ -20,6 +20,7 @@ import { CRITERIA, SOURCES, type SourceKey } from "@/lib/config";
 import type { CityView, ListingView, SourceStatus } from "@/lib/data";
 import { ilsShort, isFresh, relativeTime } from "@/lib/format";
 import { listingPublishedTime, newestFirst } from "@/lib/listing-order";
+import { lockPageScroll } from "@/lib/scroll-lock";
 import { inventoryMatches, projectMatches, projectSortPrice, type Inventory } from "@/lib/projects";
 import { isMotivated } from "@/lib/price-history";
 import { AddCityButton } from "./add-city";
@@ -1094,8 +1095,7 @@ function BottomSheet({
 
   useEffect(() => {
     if (!open) return;
-    const { overflow } = document.body.style;
-    document.body.style.overflow = "hidden";
+    const unlock = lockPageScroll();
     sheetRef.current?.focus({ preventScroll: true });
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     // The sheet is a small-screen affordance; close it if the viewport grows past lg.
@@ -1104,7 +1104,7 @@ function BottomSheet({
     document.addEventListener("keydown", onKey);
     mq.addEventListener("change", onMq);
     return () => {
-      document.body.style.overflow = overflow;
+      unlock();
       document.removeEventListener("keydown", onKey);
       mq.removeEventListener("change", onMq);
     };

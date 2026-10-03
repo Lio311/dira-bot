@@ -16,6 +16,7 @@ import { createPortal } from "react-dom";
 import { addCity, removeCity, searchCities, type CitySuggestion } from "@/lib/city-actions";
 import { MAX_CUSTOM_CITIES, PRIORITY_LABEL, type Priority } from "@/lib/config";
 import type { CityView } from "@/lib/data";
+import { lockPageScroll } from "@/lib/scroll-lock";
 import { Segmented } from "./controls";
 
 const EASE: [number, number, number, number] = [0.23, 1, 0.32, 1];
@@ -119,11 +120,10 @@ function AddCityDialog({ cities, passcodeRequired, onClose }: { cities: CityView
 
   // Lock page scroll and focus the input while open.
   useEffect(() => {
-    const { overflow } = document.body.style;
-    document.body.style.overflow = "hidden";
+    const unlock = lockPageScroll();
     inputRef.current?.focus({ preventScroll: true });
     return () => {
-      document.body.style.overflow = overflow;
+      unlock();
     };
   }, []);
 
@@ -314,7 +314,7 @@ function AddCityDialog({ cities, passcodeRequired, onClose }: { cities: CityView
             <button
               type="button"
               onClick={onClose}
-              aria-label="Close"
+              aria-label="Close add city"
               className="-mr-2 -mt-1 grid size-9 shrink-0 place-items-center rounded-full text-muted outline-none transition-[background-color,color,transform] duration-150 hover:bg-surface-2 hover:text-fg focus-visible:ring-2 focus-visible:ring-accent/40 active:scale-[0.94]"
             >
               <svg viewBox="0 0 16 16" className="size-4" fill="none" aria-hidden>
@@ -535,6 +535,9 @@ function AddCityDialog({ cities, passcodeRequired, onClose }: { cities: CityView
                 </ul>
               </section>
             )}
+          </div>
+          <div className="shrink-0 border-t border-border px-5 pt-3 pb-[calc(12px+env(safe-area-inset-bottom))]">
+            <button type="button" onClick={onClose} className="h-11 w-full rounded-xl border border-border-strong bg-surface-2 text-[14px] font-semibold outline-none focus-visible:ring-2 focus-visible:ring-accent/40">Done</button>
           </div>
         </motion.div>
       </div>

@@ -20,6 +20,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import type { ListingView } from "@/lib/data";
+import { lockPageScroll } from "@/lib/scroll-lock";
 import { toggleStar, type ToggleStarResult } from "@/lib/favorite-actions";
 
 /*
@@ -268,11 +269,10 @@ function PasscodeDialog({
   // Lock page scroll, focus the field, and hand focus back to whatever opened the dialog.
   useEffect(() => {
     const opener = document.activeElement as HTMLElement | null;
-    const { overflow } = document.body.style;
-    document.body.style.overflow = "hidden";
+    const unlock = lockPageScroll();
     inputRef.current?.focus({ preventScroll: true });
     return () => {
-      document.body.style.overflow = overflow;
+      unlock();
       opener?.focus?.({ preventScroll: true });
     };
   }, []);

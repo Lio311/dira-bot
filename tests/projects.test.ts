@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { newestFirst } from "../src/lib/listing-order";
+import { lockPageScroll } from "../src/lib/scroll-lock";
 import { CITIES } from "../src/lib/config";
 import { parseProject, parseProjectOffers, roomTypes, projectStage } from "../scraper/lib/project-parser";
 import { normalize } from "../scraper/lib/store";
@@ -10,6 +11,20 @@ const p: ProjectInfo = {
   developer: "יזם", offers: [{ rooms: 4, price: 3_600_000, priceKind: "from" }, { rooms: 5, price: null, priceKind: "unknown" }],
   generalPrice: 2_840_000, generalPriceKind: "from", stage: "marketing", availability: "marketing", locationPrecision: "city", checkedAt: "2026-10-03T00:00:00Z",
 };
+test("nested dialogs restore scrolling in either closing order", () => {
+  for (const parentFirst of [false, true]) {
+    const style = { overflow: "auto" };
+    const parent = lockPageScroll(style);
+    const child = lockPageScroll(style);
+    const [first, last] = parentFirst ? [parent, child] : [child, parent];
+    first();
+    assert.equal(style.overflow, "hidden");
+    first(); // duplicate cleanup must not unlock a remaining dialog
+    assert.equal(style.overflow, "hidden");
+    last();
+    assert.equal(style.overflow, "auto");
+  }
+});
 test("newest first uses publication dates, discovery fallback and stable ties", () => {
   const rows = [
     { id: 1, postedAt: "2026-09-01T00:00:00Z", firstSeenAt: "2026-10-03T00:00:00Z" },
