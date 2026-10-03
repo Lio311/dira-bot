@@ -79,17 +79,13 @@ export const ListingCard = memo(function ListingCard({
     <div
       onMouseEnter={onHover && (() => onHover(l.id))}
       onMouseLeave={onHover && (() => onHover(null))}
-      className={`group relative flex h-full flex-col transition-[translate] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] hover:-translate-y-0.5 ${highlighted ? "-translate-y-0.5" : ""}`}
+      className={`group relative flex h-full flex-col overflow-hidden rounded-2xl border bg-surface transition-[translate,box-shadow,border-color,opacity] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] hover:-translate-y-0.5 hover:shadow-[var(--shadow-lift)] focus-within:ring-2 focus-within:ring-accent ${highlighted ? "-translate-y-0.5 border-accent shadow-[var(--shadow-lift)] ring-1 ring-accent" : "border-border shadow-[var(--shadow-card)] hover:border-border-strong"} ${removed ? "opacity-70 hover:opacity-100 focus-within:opacity-100" : ""}`}
     >
       <a
         href={l.url}
         target="_blank"
         rel="noopener noreferrer"
-        className={`flex flex-1 flex-col overflow-hidden rounded-t-2xl border border-b-0 bg-surface outline-none transition-[scale,box-shadow,border-color,opacity] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] group-hover:shadow-[var(--shadow-lift)] focus-visible:ring-2 focus-visible:ring-accent active:scale-[0.99] ${
-          highlighted
-            ? "border-accent shadow-[var(--shadow-lift)] ring-1 ring-accent"
-            : "border-border shadow-[var(--shadow-card)] group-hover:border-border-strong"
-        } ${removed ? "opacity-70 group-hover:opacity-100 focus-visible:opacity-100" : ""}`}
+        className="flex flex-1 flex-col outline-none transition-[scale] duration-200 active:scale-[0.99]"
       >
         <div className="relative aspect-[16/10] overflow-hidden">
           {imgOk ? (
@@ -151,7 +147,7 @@ export const ListingCard = memo(function ListingCard({
 
         </div>
       </a>
-          <div className="mt-auto flex items-center gap-2 rounded-b-2xl border-x border-b border-border bg-surface px-4 pb-3 text-[12px] text-faint">
+          <div className="mt-auto flex items-center gap-2 px-4 pb-3 text-[12px] text-faint">
             <span className="min-w-0 flex-1">
               {l.postedAt ? `Posted ${relativeTime(l.postedAt, now)}` : `Found ${relativeTime(l.firstSeenAt, now)}`}
               {l.isAgency === false && <span className="ml-1.5 text-muted">· Private</span>}
