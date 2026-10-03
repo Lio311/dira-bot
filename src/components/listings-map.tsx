@@ -18,6 +18,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalS
 import { cityName, SOURCES, type SourceKey } from "@/lib/config";
 import type { ListingView } from "@/lib/data";
 import { ils, ilsShort } from "@/lib/format";
+import { projectLocationLabel, projectPriceLines, PROJECT_STAGE } from "@/lib/projects";
 import { isMotivated, motivatedReasonLong } from "@/lib/price-history";
 import { STAR_PATH, useStarToggle } from "./favorites";
 import { motivatedHint, priceChangeHint } from "./price-history";
@@ -105,6 +106,7 @@ const priorityOf = (p: number) => (p >= 1 && p <= 4 ? Math.round(p) : 4);
 const sourceName = (s: string) => SOURCES[s as SourceKey]?.name ?? s;
 
 function factsOf(l: ListingView): string[] {
+  if (l.project) return [l.project.developer, PROJECT_STAGE[l.project.stage], projectLocationLabel(l.project)];
   return [
     l.rooms != null ? `${l.rooms} rooms` : null,
     l.sqm ? `${l.sqm} m²` : null,
@@ -113,6 +115,7 @@ function factsOf(l: ListingView): string[] {
 }
 
 function placeOf(l: ListingView): string {
+  if (l.project) return l.title || l.street || cityName(l.city);
   return (
     [l.street, l.neighborhood].filter(Boolean).join(", ") ||
     l.title ||
@@ -154,17 +157,20 @@ interface MarkerEntry {
   sig: string;
 }
 
-const markerSig = (l: Located) => `${l.lat},${l.lng},${l.price},${l.priority}`;
+const markerSig = (l: Located, group: Located[] = []) => `${l.lat},${l.lng},${l.price},${l.priority},${l.title},${JSON.stringify(l.project)},${group.map((item) => item.id).join(",")}`;
 
-function paintMarker(entry: MarkerEntry, l: Located) {
+function paintMarker(entry: MarkerEntry, l: Located, group: Located[] = []) {
   const p = priorityOf(l.priority);
   entry.el.dataset.p = String(p);
   entry.pill.style.setProperty("--lm-dot", `var(--p${p})`);
-  entry.price.textContent = ilsShort(l.price);
+  entry.el.classList.toggle("lm-marker--project", !!l.project);
+  entry.price.textContent = l.project ? l.title : ilsShort(l.price);
+  if (group.length > 1) entry.price.textContent = `${l.title} (+${group.length - 1})`;
+  entry.pill.title = l.project ? [l.title, ...projectPriceLines(l.project), projectLocationLabel(l.project)].join(" · ") : "";
   const facts = factsOf(l);
   const place = placeOf(l);
-  entry.pill.setAttribute("aria-label", [ils(l.price), ...facts, place].filter(Boolean).join(", "));
-  entry.sig = markerSig(l);
+  entry.pill.setAttribute("aria-label", [l.project ? projectPriceLines(l.project).join(" · ") : ils(l.price), ...facts, place].filter(Boolean).join(", "));
+  entry.sig = markerSig(l, group);
 }
 
 function setMarkerActive(entry: MarkerEntry | undefined, active: boolean, selected: boolean) {
@@ -254,7 +260,12 @@ function buildPopupContent(
   const body = h("div", "lm-card-body");
 
   const priceRow = h("div", "lm-card-price-row");
-  priceRow.append(h("span", "lm-card-price", ils(l.price)));
+  if (l.project) {
+    priceRow.style.display = "block";
+    priceRow.dir = "ltr";
+    for (const line of projectPriceLines(l.project)) priceRow.append(h("div", "lm-card-facts", line));
+    body.append(h("div", "lm-card-source", "▦ New development · Confirm availability by room type"));
+  } else priceRow.append(h("span", "lm-card-price", ils(l.price)));
   if (l.price && l.sqm) priceRow.append(h("span", "lm-card-per-sqm", `${ilsShort(Math.round(l.price / l.sqm))}/m²`));
   body.append(priceRow);
 
@@ -295,7 +306,7 @@ function buildPopupContent(
   const actions = h("div", "lm-card-actions");
   if (onStar) actions.append(buildStar(l.starredAt != null, onStar));
   if (href) {
-    const link = h("a", "lm-card-link", "Open listing ↗");
+    const link = h("a", "lm-card-link", l.project ? "Developer website ↗" : "Open listing ↗");
     link.href = href;
     link.target = "_blank";
     link.rel = "noopener noreferrer";
@@ -361,6 +372,18 @@ export default function ListingsMap({ listings, hoveredId, selectedId, onHover, 
   const dark = useSyncExternalStore(subscribeScheme, isDark, isDarkOnServer);
 
   const located = useMemo(() => listings.filter(hasCoords), [listings]);
+  // Unknown addresses share the city's centre. Show a group instead of placing
+  // several indistinguishable project markers on top of one another.
+  const cityGroups = useMemo(() => {
+    const groups = new Map<string, Located[]>();
+    for (const l of located) if (l.project?.locationPrecision === "city") {
+      const key = `${l.city}|${l.lat}|${l.lng}`;
+      groups.set(key, [...(groups.get(key) || []), l]);
+    }
+    return [...groups.values()].map((g) => g.sort((a, b) => a.id - b.id));
+  }, [located]);
+  const representative = useMemo(() => new Map(cityGroups.flatMap((g) => g.map((l) => [l.id, g[0].id] as const))), [cityGroups]);
+  const markerListings = useMemo(() => located.filter((l) => !representative.has(l.id) || representative.get(l.id) === l.id), [located, representative]);
   // Sorted so reordering the list (sorting) doesn't count as a new set.
   const idsKey = useMemo(
     () => located.map((l) => l.id).sort((a, b) => a - b).join(","),
@@ -438,7 +461,7 @@ export default function ListingsMap({ listings, hoveredId, selectedId, onHover, 
   useEffect(() => {
     if (!map) return;
     const markers = markersRef.current;
-    const next = new Set(located.map((l) => l.id));
+    const next = new Set(markerListings.map((l) => l.id));
 
     for (const [id, entry] of markers) {
       if (!next.has(id)) {
@@ -447,12 +470,13 @@ export default function ListingsMap({ listings, hoveredId, selectedId, onHover, 
       }
     }
 
-    for (const l of located) {
+    for (const l of markerListings) {
+      const group = cityGroups.find((g) => g[0].id === l.id) || [];
       const existing = markers.get(l.id);
       if (existing) {
-        if (existing.sig !== markerSig(l)) {
+        if (existing.sig !== markerSig(l, group)) {
           existing.marker.setLngLat([l.lng, l.lat]);
-          paintMarker(existing, l);
+          paintMarker(existing, l, group);
         }
         continue;
       }
@@ -479,23 +503,23 @@ export default function ListingsMap({ listings, hoveredId, selectedId, onHover, 
 
       const marker = new Marker({ element: el, anchor: "center" }).setLngLat([l.lng, l.lat]).addTo(map);
       const entry: MarkerEntry = { marker, el, pill, price, sig: "" };
-      paintMarker(entry, l);
+      paintMarker(entry, l, group);
       markers.set(id, entry);
     }
-  }, [map, located]);
+  }, [map, markerListings, cityGroups]);
 
   // Highlight hovered + selected markers (re-applied after the marker diff).
   useEffect(() => {
     const markers = markersRef.current;
     const next = new Set<number>();
-    if (hoveredId != null) next.add(hoveredId);
-    if (selectedId != null) next.add(selectedId);
+    if (hoveredId != null) next.add(representative.get(hoveredId) ?? hoveredId);
+    if (selectedId != null) next.add(representative.get(selectedId) ?? selectedId);
     for (const id of activeRef.current) {
       if (!next.has(id)) setMarkerActive(markers.get(id), false, false);
     }
-    for (const id of next) setMarkerActive(markers.get(id), true, id === selectedId);
+    for (const id of next) setMarkerActive(markers.get(id), true, id === (selectedId == null ? null : representative.get(selectedId) ?? selectedId));
     activeRef.current = next;
-  }, [map, hoveredId, selectedId, located]);
+  }, [map, hoveredId, selectedId, located, representative]);
 
   // Fit to the listings whenever the set of located ids changes.
   useEffect(() => {
@@ -545,6 +569,21 @@ export default function ListingsMap({ listings, hoveredId, selectedId, onHover, 
     popupRef.current = null;
     if (!listing) return;
 
+    const group = cityGroups.find((g) => g.some((l) => l.id === listing.id));
+    const contentNode = buildPopupContent(listing, map.getContainer().clientWidth, map.getContainer().clientHeight,
+      toggleStarRef.current ? (next) => toggleStarRef.current?.(listing.id, next) : null);
+    if (group && group.length > 1) {
+      const chooser = h("div", "lm-project-group");
+      chooser.dir = "rtl";
+      chooser.append(h("div", "lm-card-source", "Other projects at this approximate city location:"));
+      for (const l of group) if (l.id !== listing.id) {
+        const button = h("button", "lm-card-link", l.title || "Project");
+        button.type = "button";
+        button.addEventListener("click", () => onSelectRef.current(l.id));
+        chooser.append(button);
+      }
+      contentNode.append(chooser);
+    }
     const lngLat: [number, number] = [listing.lng, listing.lat];
     const popup = new Popup({
       closeButton: false,
@@ -556,14 +595,7 @@ export default function ListingsMap({ listings, hoveredId, selectedId, onHover, 
       padding: { top: 12, right: 12, bottom: 12, left: 12 },
     })
       .setLngLat(lngLat)
-      .setDOMContent(
-        buildPopupContent(
-          listing,
-          map.getContainer().clientWidth,
-          map.getContainer().clientHeight,
-          toggleStarRef.current ? (next) => toggleStarRef.current?.(listing.id, next) : null,
-        ),
-      );
+      .setDOMContent(contentNode);
 
     const open: OpenPopup = {
       id: listing.id,
@@ -595,7 +627,7 @@ export default function ListingsMap({ listings, hoveredId, selectedId, onHover, 
     };
     content?.addEventListener("animationend", fit, { once: true });
     setTimeout(fit, 260); // reduced motion: no animation, so no animationend
-  }, [map, selectedId, located]);
+  }, [map, selectedId, located, cityGroups]);
 
   // Keep the open popup's star in step with the data (optimistic star, rollback, passcode dialog).
   useEffect(() => {

@@ -19,6 +19,8 @@ import type { FeatureKey } from "@/db/schema";
 import { CRITERIA, SOURCES, type SourceKey } from "@/lib/config";
 import type { CityView, ListingView, SourceStatus } from "@/lib/data";
 import { ilsShort, isFresh, relativeTime } from "@/lib/format";
+import { listingPublishedTime, newestFirst } from "@/lib/listing-order";
+import { inventoryMatches, projectMatches, projectSortPrice, type Inventory } from "@/lib/projects";
 import { isMotivated } from "@/lib/price-history";
 import { AddCityButton } from "./add-city";
 import { AMENITIES, AmenityIcon, amenityTitle } from "./amenities";
@@ -58,7 +60,7 @@ type Sort =
 
 const SORTS: { value: Sort; label: string }[] = [
   { value: "priority", label: "Priority" },
-  { value: "newest", label: "Newest" },
+  { value: "newest", label: "Newest to oldest" },
   { value: "price-asc", label: "Price ↑" },
   { value: "price-desc", label: "Price ↓" },
   { value: "sqm-price", label: "₪/m² ↑" },
@@ -72,7 +74,7 @@ const SORTS: { value: Sort; label: string }[] = [
   { value: "changed", label: "Recently changed" },
 ];
 
-const postedTime = (l: ListingView) => new Date(l.postedAt ?? l.firstSeenAt).getTime();
+const postedTime = listingPublishedTime;
 /** Total drop vs the first known price. */
 const dropOf = (l: ListingView) => (l.priceChange != null && l.priceChange < 0 ? -l.priceChange : null);
 /** Latest change first; changes with no known date (a site's undated "price before") after dated ones. */
@@ -80,8 +82,8 @@ const changedOf = (l: ListingView) => (l.priceChangedAt ? new Date(l.priceChange
 const perSqmOf = (l: ListingView) => (l.price && l.sqm ? l.price / l.sqm : null);
 
 function sortListings(list: ListingView[], sort: Sort) {
-  const byNewest = (a: ListingView, b: ListingView) => postedTime(b) - postedTime(a);
-  const priceOr = (l: ListingView, fallback: number) => l.price ?? fallback;
+  const byNewest = newestFirst;
+  const priceOr = (l: ListingView, fallback: number) => (l.project ? projectSortPrice(l.project) : l.price) ?? fallback;
   const perSqm = (l: ListingView) => (l.price && l.sqm ? l.price / l.sqm : Infinity);
   /** Orders by a numeric field; listings without it go last, ties newest first. */
   const by = (get: (l: ListingView) => number | null, dir: 1 | -1) => (a: ListingView, b: ListingView) => {
@@ -233,11 +235,11 @@ function buildMatcher(f: Filters, q: string, now: number, bounds: Record<RangeKe
   if (f.priority) tests.push(["priority", (l) => l.priority === f.priority]);
   if (f.cities.length) tests.push(["cities", (l) => f.cities.includes(l.city)]);
   if (f.source !== "all") tests.push(["source", (l) => l.source === f.source]);
-  if (f.rooms.length) tests.push(["rooms", (l) => l.rooms != null && f.rooms.includes(l.rooms)]);
+  if (f.rooms.length) tests.push(["rooms", (l) => l.project ? projectMatches(l.project, f.rooms, f.price) : l.rooms != null && f.rooms.includes(l.rooms)]);
   if (f.types.length) tests.push(["types", (l) => f.types.includes(typeOf(l) ?? "")]);
   for (const d of RANGES) {
     const r = f[d.key];
-    if (r) tests.push([d.key, (l) => inRange(d.get(l), r, bounds[d.key])]);
+    if (r) tests.push([d.key, (l) => d.key === "price" && l.project ? projectMatches(l.project, f.rooms, r) : inRange(d.get(l), r, bounds[d.key])]);
   }
   if (f.posted) tests.push(["posted", (l) => now - postedTime(l) < f.posted * 86_400_000]);
   if (f.priceMove !== "any") tests.push(["priceMove", (l) => (f.priceMove === "motivated" ? isMotivated(l) : movedOf(l) === f.priceMove)]);
@@ -279,8 +281,9 @@ export function Dashboard({
   const all = useStarredListings(serverListings);
   // Everything below (results, counts, stats, map) works on the chosen scope only.
   const [scope, setScope] = useState<Scope>("active");
+  const [inventory, setInventory] = useState<Inventory>("apartments");
   const removedCount = useMemo(() => all.filter((l) => l.removedAt).length, [all]);
-  const listings = useMemo(() => all.filter((l) => !!l.removedAt === (scope === "removed")), [all, scope]);
+  const listings = useMemo(() => all.filter((l) => !!l.removedAt === (scope === "removed") && inventoryMatches(l, inventory)), [all, scope, inventory]);
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<Sort>("priority");
@@ -362,8 +365,8 @@ export function Dashboard({
   const stats = useMemo(() => {
     const fresh = listings.filter((l) => isFresh(l.removedAt ?? l.firstSeenAt, 24, now)).length;
     const changedThisWeek = listings.filter((l) => l.priceChangedAt && now - new Date(l.priceChangedAt).getTime() < 7 * 86_400_000).length;
-    const perSqm = median(filtered.filter((l) => l.price && l.sqm).map((l) => l.price! / l.sqm!));
-    return { fresh, changedThisWeek, perSqm, medianPrice: median(filtered.flatMap((l) => (l.price ? [l.price] : []))) };
+    const perSqm = median(filtered.filter((l) => !l.project && l.price && l.sqm).map((l) => l.price! / l.sqm!));
+    return { fresh, changedThisWeek, perSqm, medianPrice: median(filtered.flatMap((l) => (!l.project && l.price ? [l.price] : []))) };
   }, [listings, filtered, now]);
 
   const counts = useMemo(() => {
@@ -378,7 +381,7 @@ export function Dashboard({
       if (m) moves[m]++;
       if (isMotivated(l)) moves.motivated++;
       cities.set(l.city, (cities.get(l.city) ?? 0) + 1);
-      if (l.rooms != null) rooms.set(l.rooms, (rooms.get(l.rooms) ?? 0) + 1);
+      for (const n of l.project ? l.project.offers.map((o) => o.rooms) : l.rooms != null ? [l.rooms] : []) rooms.set(n, (rooms.get(n) ?? 0) + 1);
       const t = typeOf(l);
       if (t) types.set(t, (types.get(t) ?? 0) + 1);
     }
@@ -602,23 +605,32 @@ export function Dashboard({
       <main className="mx-auto w-full max-w-[1320px] flex-1 px-4 pb-4 sm:px-6">
         <section className="pt-10 pb-8 sm:pt-14">
           <h1 className="max-w-2xl text-[32px] font-semibold leading-[1.1] tracking-[-0.035em] text-balance sm:text-[40px]">
-            Every 4–5 room flat between ₪2M and ₪4.5M, <span className="text-muted">in one place.</span>
+            {inventory === "projects" ? <>New projects with 4–5 room flats, <span className="text-muted">direct from developers.</span></> : inventory === "both" ? <>Apartments and new projects, <span className="text-muted">on one map.</span></> : <>Every 4–5 room flat between ₪2M and ₪4.5M, <span className="text-muted">in one place.</span></>}
           </h1>
           <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-muted">
-            Collected from Yad2, Madlan, OnMap, Homeless and Facebook groups every 8 hours, ranked by where you want to live.
+            {inventory === "apartments" ? "Collected from Yad2, Madlan, OnMap, Homeless and Facebook groups every 8 hours, ranked by where you want to live." : "Projects from developer websites in your tracked cities. Prices are shown by room type when published. Approximate locations are explained in project details."}
           </p>
 
           <dl className="mt-8 grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-border bg-border sm:grid-cols-4">
-            <Stat label={scope === "removed" ? "Not relevant" : "Tracked listings"} value={listings.length.toLocaleString("en-US")} />
+            <Stat label={scope === "removed" ? "Not relevant" : inventory === "projects" ? "Tracked projects" : "Tracked listings"} value={listings.length.toLocaleString("en-US")} />
             <Stat label={scope === "removed" ? "Taken down in 24h" : "New in 24h"} value={stats.fresh.toLocaleString("en-US")} accent={stats.fresh > 0} />
-            <Stat label="Median price" value={ilsShort(stats.medianPrice)} hint="current filter" />
-            <Stat label="Median ₪/m²" value={stats.perSqm ? `₪${Math.round(stats.perSqm).toLocaleString("en-US")}` : "—"} hint="current filter" />
+            <Stat label="Median apartment price" value={ilsShort(stats.medianPrice)} hint="current filter" />
+            <Stat label="Apartment median ₪/m²" value={stats.perSqm ? `₪${Math.round(stats.perSqm).toLocaleString("en-US")}` : "—"} hint="current filter" />
           </dl>
           <SubscribeForm />
         </section>
 
         {/* Filters */}
         <div ref={barRef} className="sticky top-14 z-20 -mx-4 border-b border-border/70 bg-bg/85 px-4 py-3 backdrop-blur-xl sm:-mx-6 sm:px-6">
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <Segmented id="inventory" label="Inventory" value={inventory} onChange={(v) => {
+              setInventory(v); setFilters(NO_FILTERS); setQuery(""); setScope("active"); setLimit(PAGE); setSelectedId(null); setHoveredId(null);
+            }} options={[
+              { value: "both", label: "All" },
+              { value: "apartments", label: "Resale apartments" },
+              { value: "projects", label: "Projects" },
+            ]} />
+          </div>
           {/* Below lg: one row — search, Filters (opens the sheet), view. */}
           <div className="flex items-center gap-2 lg:hidden">
             <SearchField value={query} onChange={onQuery} placeholder="Search" className="min-w-0 flex-1" />
@@ -663,6 +675,7 @@ export function Dashboard({
 
         <div className="flex items-center justify-between gap-3 py-5 text-[13px] text-muted">
           <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
+            {sort === "newest" && <span className="text-[11px] text-faint">Publication date when available; otherwise first discovered.</span>}
             {(removedCount > 0 || scope === "removed") && (
               <Segmented
                 id="scope"

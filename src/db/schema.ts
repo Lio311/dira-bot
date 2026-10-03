@@ -11,6 +11,7 @@ import {
   index,
   boolean,
 } from "drizzle-orm/pg-core";
+import type { ProjectInfo } from "../lib/projects";
 import type { PriceEntry } from "../lib/price-history";
 
 export const FEATURE_KEYS = ["parking", "elevator", "balcony", "safeRoom", "airConditioning", "storage", "accessible", "renovated"] as const;
@@ -30,6 +31,8 @@ export const listings = pgTable(
     neighborhood: text("neighborhood"),
     street: text("street"),
     propertyType: text("property_type"),
+    /** Non-null for a developer project; prices belong to room types, not a single flat. */
+    project: jsonb("project").$type<ProjectInfo>(),
     rooms: real("rooms"),
     sqm: integer("sqm"),
     floor: integer("floor"),

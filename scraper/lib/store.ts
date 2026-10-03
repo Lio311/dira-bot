@@ -3,6 +3,7 @@ import { alias } from "drizzle-orm/pg-core";
 import { CITIES, CRITERIA, inCriteria, matchCity, type City } from "../../src/lib/config";
 import type { getDb } from "../../src/db/client";
 import { listings, type Listing, type NewListing } from "../../src/db/schema";
+import { projectFits } from "../../src/lib/projects";
 import { mergePriceHistory, type PriceEntry, type SitePrice } from "../../src/lib/price-history";
 import type { RawListing } from "../types";
 
@@ -18,7 +19,7 @@ export function normalize(r: RawListing, cities: readonly City[] = CITIES): Norm
   const rooms = r.rooms != null && Number.isFinite(r.rooms) ? r.rooms : null;
   const price = r.price != null && Number.isFinite(r.price) ? Math.round(r.price) : null;
 
-  const fits = r.lenientRooms && rooms == null
+  const fits = r.project ? projectFits(r.project) : r.lenientRooms && rooms == null
     ? price != null && price >= CRITERIA.minPrice && price <= CRITERIA.maxPrice
     : inCriteria({ rooms, price });
   if (!fits) return null;
@@ -36,6 +37,7 @@ export function normalize(r: RawListing, cities: readonly City[] = CITIES): Norm
     neighborhood: r.neighborhood?.trim() || null,
     street,
     propertyType: r.propertyType ?? null,
+    project: r.project ?? null,
     rooms,
     sqm: r.sqm ? Math.round(r.sqm) : null,
     floor: r.floor ?? null,
@@ -169,6 +171,7 @@ export async function saveListings(db: Db, batch: Normalized[]) {
           // Seen again, so not taken down after all (or re-listed).
           removedAt: null,
           url: item.url,
+          ...(item.project && { project: item.project, title: item.title, description: item.description, street: item.street }),
           images: item.images?.length ? item.images : prev.images,
           sqm: item.sqm ?? prev.sqm,
           lat: item.lat ?? prev.lat,

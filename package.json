@@ -10,6 +10,7 @@
     "scrape": "tsx scraper/run.ts",
     "db:generate": "drizzle-kit generate",
     "db:studio": "drizzle-kit studio",
+    "test:projects": "node --import tsx --test tests/projects.test.ts",
     "test:push": "node --import tsx --test tests/push.test.ts"
   },
   "dependencies": {

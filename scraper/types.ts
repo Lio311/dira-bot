@@ -1,3 +1,4 @@
+import type { ProjectInfo } from "../src/lib/projects";
 import type { FeatureKey } from "../src/db/schema";
 import type { City, SourceKey } from "../src/lib/config";
 import type { SitePrice } from "../src/lib/price-history";
@@ -16,6 +17,7 @@ export interface RawListing {
   neighborhood?: string | null;
   street?: string | null;
   propertyType?: string | null;
+  project?: ProjectInfo;
   rooms: number | null;
   sqm?: number | null;
   floor?: number | null;

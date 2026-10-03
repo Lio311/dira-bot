@@ -2,12 +2,14 @@ import "server-only";
 import { and, desc, gt, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import { listings, scrapeRuns, type FeatureKey } from "@/db/schema";
+import type { ProjectInfo } from "@/lib/projects";
 import { usableImage } from "@/lib/images";
 import { getCities } from "@/lib/cities";
 import { passcodeRequired } from "@/lib/passcode";
 import { summarizePrices, type PriceEntry } from "@/lib/price-history";
 
 export interface ListingView {
+  project?: ProjectInfo | null;
   id: number;
   source: string;
   url: string;
@@ -111,6 +113,7 @@ export async function getDashboardData() {
   const view: ListingView[] = rows.map((l) => {
     const prices = summarizePrices(l.priceHistory);
     return {
+      project: l.project,
       id: l.id,
       source: l.source,
       url: l.url,

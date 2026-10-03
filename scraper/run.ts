@@ -14,6 +14,7 @@ import { normalize, promoteLiveDuplicates, saveListings, type Normalized, type P
 import { sendMobileAlerts } from "./lib/push";
 import { sendToSubscribers } from "./lib/subscribers";
 import { verifyRemoved } from "./lib/verify-removed";
+import { projects } from "./sources/projects";
 import { yad2 } from "./sources/yad2";
 import { onmap } from "./sources/onmap";
 import { homeless } from "./sources/homeless";
@@ -22,7 +23,7 @@ import { facebookGroups, facebookMarketplace } from "./sources/facebook";
 import { BlockedError, type Source } from "./types";
 import { ApifyBudgetError } from "./lib/apify";
 
-const ALL: Source[] = [yad2, onmap, homeless, madlan, facebookGroups, facebookMarketplace];
+const ALL: Source[] = [yad2, onmap, homeless, madlan, facebookGroups, facebookMarketplace, projects];
 
 const args = process.argv.slice(2);
 const flag = (name: string) => args.find((a) => a === `--${name}` || a.startsWith(`--${name}=`));
@@ -108,7 +109,7 @@ async function main() {
   await closeBrowser();
 
   if (dry) {
-    writeFileSync("dry-run.json", JSON.stringify(dryRows, null, 2));
+    writeFileSync(flag("output")?.split("=")[1] || "dry-run.json", JSON.stringify(dryRows, null, 2));
     log(`dry run: ${dryRows.length} listings written to dry-run.json`);
     return anySucceeded;
   }

@@ -45,3 +45,8 @@ next-env.d.ts
 # local tooling
 .claude/
 dry-run.json
+
+# Weekly project discovery cache (persisted separately by CI)
+.project-discovery-cache.json
+
+.project-geocode-cache.json

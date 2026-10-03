@@ -551,3 +551,9 @@
     animation: none;
   }
 }
+
+/* Projects use a rectangular pin, distinct from the apartment price pills. */
+.lm-marker--project .lm-pill { border-radius: 6px; border-color: var(--accent); }
+.lm-marker--project .lm-pill-dot { border-radius: 1px; background: var(--accent); }
+
+.lm-project-group { display: flex; flex-direction: column; gap: 8px; max-height: 160px; overflow: auto; padding: 12px; border-top: 1px solid var(--border); }

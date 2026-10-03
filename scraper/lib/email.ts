@@ -1,6 +1,7 @@
 import { CITIES, cityName, PRIORITY_LABEL, SOURCES, type City, type Priority, type SourceKey } from "../../src/lib/config";
 import type { Listing } from "../../src/db/schema";
 import { getMailer } from "../../src/lib/mailer";
+import { projectPriceLines } from "../../src/lib/projects";
 import { countCuts, isMotivated, pricePoints } from "../../src/lib/price-history";
 import type { PriceChange } from "./store";
 
@@ -18,7 +19,7 @@ const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&l
 
 function row(l: Listing, cities: readonly City[], note?: string) {
   const p = PRIORITY_STYLE[l.priority as Priority];
-  const place = [l.neighborhood, l.street].filter(Boolean).join(", ");
+  const place = [l.project ? l.title : null, l.neighborhood, l.street].filter(Boolean).join(", ");
   const facts = [l.rooms ? `${l.rooms} rooms` : null, l.sqm ? `${l.sqm} m²` : null, l.floor != null ? `floor ${l.floor}` : null]
     .filter(Boolean)
     .join(" · ");
@@ -28,7 +29,7 @@ function row(l: Listing, cities: readonly City[], note?: string) {
       <td style="vertical-align:top">
         <span style="display:inline-block;padding:2px 8px;border-radius:999px;background:${p.bg};color:${p.fg};font-size:11px;font-weight:600;letter-spacing:.02em">${PRIORITY_LABEL[l.priority as Priority]} · ${esc(cityName(l.city, cities))}</span>
         <span style="font-size:11px;color:#8a8780;margin-left:6px">${SOURCES[l.source as SourceKey]?.name ?? l.source}</span>
-        <div style="font-size:18px;font-weight:650;color:#1c1b19;margin-top:6px;font-variant-numeric:tabular-nums">${ils(l.price)}${note ? ` <span style="font-size:12px;font-weight:500;color:#0b6b3a">${note}</span>` : ""}</div>
+        <div style="font-size:18px;font-weight:650;color:#1c1b19;margin-top:6px;font-variant-numeric:tabular-nums">${l.project ? projectPriceLines(l.project).map(esc).join("<br>") : ils(l.price)}${note ? ` <span style="font-size:12px;font-weight:500;color:#0b6b3a">${note}</span>` : ""}</div>
         <div style="font-size:13px;color:#57534e;margin-top:2px">${facts}</div>
         ${place ? `<div dir="rtl" style="font-size:13px;color:#57534e;margin-top:2px;text-align:left">${esc(place)}</div>` : ""}
       </td>

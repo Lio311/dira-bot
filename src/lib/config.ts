@@ -226,6 +226,7 @@ export function inCriteria(l: { rooms: number | null; price: number | null }): b
 }
 
 export const SOURCES = {
+  projects: { name: "Developer projects" },
   yad2: { name: "Yad2" },
   onmap: { name: "OnMap" },
   homeless: { name: "Homeless" },

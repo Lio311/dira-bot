@@ -20,6 +20,11 @@ Email alerts go to `NOTIFY_TO` plus every confirmed subscriber. Visitors sign up
 | Madlan | Apify actor `parsebird/madlan-real-estate-scraper` | Madlan's own site has a press-and-hold CAPTCHA |
 | Facebook groups | Apify actor `apify/facebook-groups-scraper` | Public groups only, no personal account involved; Hebrew text parsed for price/rooms/m² |
 | FB Marketplace | Apify actor `swerve/fb-marketplace-scraper` | Opt-in (`FB_MARKETPLACE=1`), the priciest source |
+| Developer projects | Public official catalogs + optional SerpApi Google discovery | BOH, Virtue, ICR, Shviro and Prashkovsky; relevant 4–5 room types, including unpublished prices |
+
+The dashboard switches between **Resale apartments**, **Projects** and **All**, including the map. Project markers show project names. Address, street and approximate city locations are distinguished in project details; projects sharing a city location are grouped. Prices remain attached to their room type; a general project minimum never becomes a 4/5-room price. Project prices are excluded from apartment medians. **Newest to oldest** uses the source publication date when available, otherwise the date first discovered by the bot.
+
+Projects are checked daily. Google discovery refreshes weekly (one search per tracked city) and stays within verified developer domains. Set `SERPAPI_API_KEY` in GitHub Actions secrets; Vercel does not run the scheduled scraper. Without a key, the official catalogs still run. Configure `PROJECT_MAX_PAGES` (150 by default) and optional verified `PROJECT_URLS`. Street/address coordinates use cached OpenStreetMap data through Photon, with a paced limit of 15 new lookups per run; unmatched locations fall back to an explicitly approximate city point. Run `FORCE_PROJECTS=1 npm run scrape -- --only=projects --no-email --no-push --no-verify` for a maintenance scan. Apply pending migrations before deploying the dashboard.
 
 Apify sources run once a day (00:00 UTC run) unless `APIFY_EVERY_RUN=1`.
 

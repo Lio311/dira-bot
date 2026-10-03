@@ -4,6 +4,7 @@ import { memo, useState } from "react";
 import { cityName, PRIORITY_LABEL, SOURCES, type Priority, type SourceKey } from "@/lib/config";
 import type { ListingView } from "@/lib/data";
 import { ils, ilsShort, isFresh, relativeTime } from "@/lib/format";
+import { ProjectCard } from "./project-card";
 import { AmenityList } from "./amenities";
 import { StarButton } from "./favorites";
 import { LogoMark } from "./logo";
@@ -69,6 +70,8 @@ export const ListingCard = memo(function ListingCard({
   const place = placeLine(l);
   const fresh = isFresh(l.firstSeenAt, 24, now);
   const removed = !!l.removedAt;
+
+  if (l.project) return <ProjectCard l={l} now={now} onHover={onHover} highlighted={highlighted} />;
 
   // The wrapper owns hover and lift so the buttons over the photo (siblings: a button can't live inside the link) move with the card.
   return (
@@ -173,6 +176,7 @@ export const ListingCard = memo(function ListingCard({
 });
 
 export function ListingRow({ l, now }: { l: ListingView; now: number }) {
+  if (l.project) return <ProjectCard l={l} now={now} compact />;
   const perSqm = l.price && l.sqm ? Math.round(l.price / l.sqm) : null;
   const removed = !!l.removedAt;
   // No button inside a link: the star is the link's sibling, and the link is stretched over the grid (last child,

@@ -8,10 +8,14 @@ on:
   workflow_dispatch:
     inputs:
       only:
-        description: "Comma-separated sources (yad2,onmap,homeless,madlan,fb-group,fb-marketplace). Empty = all."
+        description: "Comma-separated sources (yad2,onmap,homeless,madlan,fb-group,fb-marketplace,projects). Empty = all."
         required: false
       force_apify:
         description: "Run Apify sources even outside the daily slot"
+        type: boolean
+        default: false
+      maintenance:
+        description: "Update data without email, push or removal verification"
         type: boolean
         default: false
 
@@ -41,10 +45,21 @@ jobs:
 
       - run: npx playwright install --with-deps chromium
 
+      - name: Restore weekly project discovery
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            .project-discovery-cache.json
+            .project-geocode-cache.json
+          key: project-discovery-${{ github.run_id }}
+          restore-keys: project-discovery-
+
       - name: Scrape, store and email
-        run: npm run scrape -- ${{ inputs.only && format('--only={0}', inputs.only) || '' }}
+        run: npm run scrape -- ${{ inputs.only && format('--only={0}', inputs.only) || '' }} ${{ inputs.maintenance && '--no-email --no-push --no-verify' || '' }}
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SERPAPI_API_KEY: ${{ secrets.SERPAPI_API_KEY }}
+          FORCE_PROJECTS: ${{ inputs.only == 'projects' && '1' || '' }}
           APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
           FB_GROUP_URLS: ${{ secrets.FB_GROUP_URLS }}
           SMTP_USER: ${{ secrets.SMTP_USER }}
@@ -55,3 +70,12 @@ jobs:
           VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
           VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT }}
           FORCE_APIFY: ${{ inputs.force_apify && '1' || '' }}
+
+      - name: Save project discovery
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            .project-discovery-cache.json
+            .project-geocode-cache.json
+          key: project-discovery-${{ github.run_id }}
