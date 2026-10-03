@@ -300,6 +300,7 @@
 
 .lm-card-foot {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
@@ -359,6 +360,7 @@
 
 .lm-card-actions {
   display: inline-flex;
+  flex-wrap: wrap;
   flex: none;
   align-items: center;
   gap: 6px;

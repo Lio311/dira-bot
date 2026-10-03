@@ -5,6 +5,7 @@ import { cityName, PRIORITY_LABEL, SOURCES, type Priority, type SourceKey } from
 import type { ListingView } from "@/lib/data";
 import { ils, ilsShort, isFresh, relativeTime } from "@/lib/format";
 import { ProjectCard } from "./project-card";
+import { ShareButton } from "./share-button";
 import { AmenityList } from "./amenities";
 import { StarButton } from "./favorites";
 import { LogoMark } from "./logo";
@@ -78,13 +79,13 @@ export const ListingCard = memo(function ListingCard({
     <div
       onMouseEnter={onHover && (() => onHover(l.id))}
       onMouseLeave={onHover && (() => onHover(null))}
-      className={`group relative h-full transition-[translate] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] hover:-translate-y-0.5 ${highlighted ? "-translate-y-0.5" : ""}`}
+      className={`group relative flex h-full flex-col transition-[translate] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] hover:-translate-y-0.5 ${highlighted ? "-translate-y-0.5" : ""}`}
     >
       <a
         href={l.url}
         target="_blank"
         rel="noopener noreferrer"
-        className={`flex h-full flex-col overflow-hidden rounded-2xl border bg-surface outline-none transition-[scale,box-shadow,border-color,opacity] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] group-hover:shadow-[var(--shadow-lift)] focus-visible:ring-2 focus-visible:ring-accent active:scale-[0.99] ${
+        className={`flex flex-1 flex-col overflow-hidden rounded-t-2xl border border-b-0 bg-surface outline-none transition-[scale,box-shadow,border-color,opacity] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] group-hover:shadow-[var(--shadow-lift)] focus-visible:ring-2 focus-visible:ring-accent active:scale-[0.99] ${
           highlighted
             ? "border-accent shadow-[var(--shadow-lift)] ring-1 ring-accent"
             : "border-border shadow-[var(--shadow-card)] group-hover:border-border-strong"
@@ -147,23 +148,25 @@ export const ListingCard = memo(function ListingCard({
             </p>
           )}
           <AmenityList features={l.features} className="pt-0.5" />
-          <div className="mt-auto flex items-center justify-between pt-3 text-[12px] text-faint">
-            <span>
+
+        </div>
+      </a>
+          <div className="mt-auto flex items-center gap-2 rounded-b-2xl border-x border-b border-border bg-surface px-4 pb-3 text-[12px] text-faint">
+            <span className="min-w-0 flex-1">
               {l.postedAt ? `Posted ${relativeTime(l.postedAt, now)}` : `Found ${relativeTime(l.firstSeenAt, now)}`}
               {l.isAgency === false && <span className="ml-1.5 text-muted">· Private</span>}
               {l.alsoOn.length > 0 && (
                 <span className="ml-1.5 text-muted">· also on {[...new Set(l.alsoOn.map((a) => sourceName(a.source)))].join(", ")}</span>
               )}
             </span>
-            <span className="inline-flex items-center gap-1 font-medium text-muted transition-colors group-hover:text-accent">
+            <ShareButton url={l.url} title={[cityName(l.city), place].filter(Boolean).join(" · ")} />
+            <a href={l.url} target="_blank" rel="noopener noreferrer" className="inline-flex h-10 shrink-0 items-center gap-1 font-medium text-muted transition-colors hover:text-accent">
               Open
               <svg className="size-3 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" viewBox="0 0 12 12" fill="none">
                 <path d="M3.5 8.5 8.5 3.5M4.5 3.5h4v4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
-            </span>
+            </a>
           </div>
-        </div>
-      </a>
       {/* Same box as the photo (inside the link's 1px border), so the price badge and star sit in its bottom-right corner. */}
       <div className="pointer-events-none absolute inset-x-px top-px aspect-[16/10]">
         <div className="pointer-events-auto absolute right-2 bottom-2 flex items-center gap-1.5">
@@ -236,6 +239,7 @@ export function ListingRow({ l, now }: { l: ListingView; now: number }) {
           className="absolute inset-0 z-[1] outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent"
         />
       </div>
+      <ShareButton url={l.url} title={[cityName(l.city), placeLine(l)].filter(Boolean).join(" · ")} className="mr-2" />
       <StarButton id={l.id} starred={l.starredAt != null} className="mr-2" />
     </div>
   );

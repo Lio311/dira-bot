@@ -164,9 +164,10 @@ export function PriceChangeBadge({
         style={TONE[dir]}
         className={`inline-flex shrink-0 cursor-pointer items-center gap-0.5 whitespace-nowrap font-semibold tabular outline-none transition-[scale,filter,box-shadow] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] hover:brightness-[0.97] focus-visible:ring-2 focus-visible:ring-accent active:scale-[0.97] ${
           size === "sm" ? "h-5 rounded-md px-1.5 text-[11px]" : "h-[22px] rounded-full px-2 text-[11px] shadow-[0_1px_2px_rgb(0_0_0/0.12)]"
-        } ${open ? "ring-1 ring-current/30" : ""} ${className}`}
+        } max-lg:h-10 max-lg:px-3 ${open ? "ring-1 ring-current/30" : ""} ${className}`}
       >
         <span aria-hidden>{ARROW[dir]}</span> {amount}
+        <span className="ml-1 text-[11px] max-lg:inline lg:hidden">Price history</span>
       </button>
       <PricePopover
         id={popId}
@@ -175,6 +176,7 @@ export function PriceChangeBadge({
         popRef={popRef}
         onPointerEnter={() => window.clearTimeout(timer.current)}
         onPointerLeave={leave}
+        onClose={() => close(true)}
       >
         <PriceHistoryPanel l={l} now={now} />
       </PricePopover>
@@ -191,6 +193,7 @@ function PricePopover({
   children,
   onPointerEnter,
   onPointerLeave,
+  onClose,
 }: {
   id: string;
   open: boolean;
@@ -199,6 +202,7 @@ function PricePopover({
   children: ReactNode;
   onPointerEnter: () => void;
   onPointerLeave: (e: ReactPointerEvent) => void;
+  onClose: () => void;
 }) {
   const reduce = useReducedMotion();
   const [pos, setPos] = useState<{ top: number; left: number; above: boolean; originX: number } | null>(null);
@@ -215,7 +219,9 @@ function PricePopover({
       const left = Math.max(GUTTER, Math.min(a.left + a.width / 2 - width / 2, vw - width - GUTTER));
       const below = a.bottom + 8;
       const above = below + height > vh - GUTTER && a.top - 8 - height > GUTTER;
-      setPos({ top: above ? a.top - 8 - height : below, left, above, originX: a.left + a.width / 2 - left });
+      const panelHeight = Math.min(height, vh - GUTTER * 2);
+      const top = Math.max(GUTTER, Math.min(above ? a.top - 8 - panelHeight : below, vh - GUTTER - panelHeight));
+      setPos({ top, left, above, originX: a.left + a.width / 2 - left });
     };
     place();
     // A second pass once the panel has its real height.
@@ -251,8 +257,11 @@ function PricePopover({
             transformOrigin: `${pos?.originX ?? WIDTH / 2}px ${pos?.above ? "100%" : "0"}`,
             visibility: pos ? "visible" : "hidden",
           }}
-          className="fixed z-[60] rounded-2xl border border-border bg-surface p-3.5 text-fg shadow-[var(--shadow-lift)]"
+          className="fixed z-[60] max-h-[calc(100dvh-32px)] overflow-y-auto overscroll-contain rounded-2xl border border-border bg-surface p-3.5 text-fg shadow-[var(--shadow-lift)]"
         >
+          <div className="mb-2 flex justify-end lg:hidden">
+            <button type="button" onClick={onClose} aria-label="Close price history" className="flex h-9 items-center rounded-lg border border-border px-3 text-[12px] font-medium">Close ×</button>
+          </div>
           {children}
         </motion.div>
       )}

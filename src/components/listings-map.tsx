@@ -19,6 +19,7 @@ import { cityName, SOURCES, type SourceKey } from "@/lib/config";
 import type { ListingView } from "@/lib/data";
 import { ils, ilsShort } from "@/lib/format";
 import { projectLocationLabel, projectPriceLines, PROJECT_STAGE } from "@/lib/projects";
+import { shareListing } from "@/lib/share-listing";
 import { isMotivated, motivatedReasonLong } from "@/lib/price-history";
 import { STAR_PATH, useStarToggle } from "./favorites";
 import { motivatedHint, priceChangeHint } from "./price-history";
@@ -306,6 +307,16 @@ function buildPopupContent(
   const actions = h("div", "lm-card-actions");
   if (onStar) actions.append(buildStar(l.starredAt != null, onStar));
   if (href) {
+    const share = h("button", "lm-card-link", "Share");
+    share.type = "button";
+    share.setAttribute("aria-label", `Share ${l.title || placeOf(l)}`);
+    share.addEventListener("click", async () => {
+      try {
+        const result = await shareListing(href, l.title || placeOf(l));
+        if (result === "copied") share.textContent = "Copied!";
+      } catch { share.textContent = "Try again"; }
+    });
+    actions.append(share);
     const link = h("a", "lm-card-link", l.project ? "Developer website ↗" : "Open listing ↗");
     link.href = href;
     link.target = "_blank";

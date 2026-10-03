@@ -7,6 +7,7 @@ import { relativeTime } from "@/lib/format";
 import { PROJECT_STAGE, projectLocationLabel, projectPriceLines } from "@/lib/projects";
 import { StarButton } from "./favorites";
 import { LogoMark } from "./logo";
+import { ShareButton } from "./share-button";
 
 export function ProjectCard({ l, now, onHover, highlighted = false, compact = false }: {
   l: ListingView; now: number; onHover?: (id: number | null) => void; highlighted?: boolean; compact?: boolean;
@@ -15,9 +16,9 @@ export function ProjectCard({ l, now, onHover, highlighted = false, compact = fa
   const p = l.project!;
   return (
     <div onMouseEnter={() => onHover?.(l.id)} onMouseLeave={() => onHover?.(null)}
-      className={`relative h-full overflow-hidden rounded-2xl border bg-surface shadow-[var(--shadow-card)] ${highlighted ? "border-accent ring-1 ring-accent" : "border-border"}`}>
+      className={`relative flex h-full flex-col overflow-hidden rounded-2xl border bg-surface shadow-[var(--shadow-card)] ${highlighted ? "border-accent ring-1 ring-accent" : "border-border"}`}>
       <a href={l.url} target="_blank" rel="noopener noreferrer"
-        className="flex h-full flex-col outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent">
+        className="flex flex-1 flex-col outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent">
         {!compact && <div className="relative aspect-[16/10] overflow-hidden">
           {imgOk ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -37,11 +38,14 @@ export function ProjectCard({ l, now, onHover, highlighted = false, compact = fa
           </div>
           <p className="text-[11px] leading-relaxed text-muted">Starting prices do not guarantee availability within budget. {p.availability === "marketing" ? "Advertised for sale; confirm availability by room type." : "Sales availability not verified."}</p>
           <p className="text-[11px] text-faint">{projectLocationLabel(p)}{l.lat == null ? " · Not mapped yet" : ""}</p>
-          <div className="mt-auto flex items-center justify-between gap-2 pt-2 text-[11px] text-muted">
-            <span>Checked {relativeTime(p.checkedAt, now)}</span><span className="font-medium text-accent">Developer website ↗</span>
-          </div>
+
         </div>
       </a>
+      <div className="mt-auto flex flex-wrap items-center gap-2 px-4 pb-3 text-[11px] text-muted">
+        <span className="min-w-0 flex-1">Checked {relativeTime(p.checkedAt, now)}</span>
+        <ShareButton url={l.url} title={l.title || `${p.developer} · ${cityName(l.city)}`} />
+        <a href={l.url} target="_blank" rel="noopener noreferrer" className="inline-flex h-10 items-center font-medium text-accent">Open ↗</a>
+      </div>
       <div className="absolute left-3 top-3"><StarButton id={l.id} starred={l.starredAt != null} variant="overlay" /></div>
     </div>
   );

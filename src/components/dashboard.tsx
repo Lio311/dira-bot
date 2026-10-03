@@ -151,6 +151,7 @@ const FLAGS = {
   withPhotos: { label: "With photos", test: (l: ListingView) => !!l.image },
   onlyNew: { label: "New in 24h", test: (l: ListingView, now: number) => isFresh(l.firstSeenAt, 24, now) },
   onlyPrivate: { label: "No agents", test: (l: ListingView) => l.isAgency === false },
+  onlyPriceChanges: { label: "Price changes", test: (l: ListingView) => l.priceChange != null },
 } satisfies Record<string, { label: string; test: (l: ListingView, now: number) => boolean }>;
 type FlagKey = keyof typeof FLAGS;
 const FLAG_KEYS = Object.keys(FLAGS) as FlagKey[];
@@ -637,6 +638,13 @@ export function Dashboard({
             <SearchField value={query} onChange={onQuery} placeholder="Search" className="min-w-0 flex-1" />
             <FilterButton ref={filtersBtnRef} label="Filters" count={filterCount} open={sheetOpen} onClick={() => setSheetOpen(true)} />
             <Segmented id="view-mobile" label="View" value={view} onChange={setView} options={viewOptions} />
+          </div>
+          <div className="mt-2 flex flex-wrap items-center gap-2 lg:hidden">
+            <Select label="Sort" value={sort} onChange={setSort} options={SORTS} className="min-w-0 flex-1" />
+            {inventory !== "projects" && <Chip active={filters.onlyPriceChanges} onClick={() => {
+              update({ onlyPriceChanges: !filters.onlyPriceChanges });
+              if (!filters.onlyPriceChanges) setSort("changed");
+            }}>Price changes <span className="tabular opacity-60">{listings.filter((l) => l.priceChange != null).length}</span></Chip>}
           </div>
 
           {/* lg+: two wrapping rows of quick controls; the rest lives in "More filters". */}
