@@ -47,13 +47,13 @@ Other scripts: `npm run db:generate` after schema changes (migrations apply auto
 
 ## Mobile push notifications
 
-The dashboard offers **Enable notifications** and **Turn off** per browser/device. Alerts summarize new listings and observed price changes after each scan, independently of email. Opt-in starts from now (no historical backlog). Delivery failures leave the device cursor unchanged for the next run; expired subscriptions (404/410) are removed. Turning off affects only that device. No offline page caching is installed.
+The header bell enables notifications on the first click and offers **Turn off on this device** once enabled. After permission has been granted, future visits restore the subscription automatically, without another prompt. Alerts summarize new listings and observed price changes after each scan, independently of email. Opt-in starts from now (no historical backlog). Delivery failures leave the device cursor unchanged for the next run; expired subscriptions (404/410) are removed. Turning off affects only that device. No offline page caching is installed.
 
 Setup:
 1. Run `npx web-push generate-vapid-keys` once. Keep the private key secret and retain the same pair; changing it requires devices to subscribe again.
 2. Set `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and `VAPID_SUBJECT` (a real `mailto:` contact) in both Vercel environment variables and GitHub Actions secrets.
 3. Apply the migration with `npx tsx scraper/tools/migrate.ts` before deploying the dashboard, then redeploy Vercel. The scraper also applies pending migrations automatically.
-4. On iPhone/iPad with iOS 16.4+, use **Share → Add to Home Screen**, open the icon, and tap **Enable notifications**. On Android use a compatible browser such as Chrome. HTTPS is required except for localhost.
+4. On iPhone/iPad with iOS 16.4+, use **Share → Add to Home Screen**, open the icon, and tap the header bell to allow notifications. On Android use a compatible browser such as Chrome. HTTPS is required except for localhost.
 5. Verify with a real device: opt in, run a scan that finds a new listing or price change, close the app and confirm receipt; tap the notification to open the dashboard. Turn off and confirm no further delivery. Desktop checks cannot verify iOS background delivery.
 
 Use `--no-push` to skip push delivery on a maintenance scan (`--no-email` skips email only); `--dry` never sends either kind of alert. The setup requires no native app or paid notification service. If keys or the database are missing, the dashboard shows an unavailable message and email continues normally.

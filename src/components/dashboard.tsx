@@ -592,7 +592,10 @@ export function Dashboard({
       <header className="sticky top-0 z-30 border-b border-border/80 bg-bg/80 backdrop-blur-xl backdrop-saturate-150">
         <div className="mx-auto flex h-14 max-w-[1320px] items-center justify-between px-4 sm:px-6">
           <Logo />
-          <StatusPill status={status} lastRun={lastRun} now={now} />
+          <div className="flex items-center gap-2">
+            <StatusPill status={status} lastRun={lastRun} now={now} />
+            <PushAlerts />
+          </div>
         </div>
       </header>
 
@@ -612,7 +615,6 @@ export function Dashboard({
             <Stat label="Median ₪/m²" value={stats.perSqm ? `₪${Math.round(stats.perSqm).toLocaleString("en-US")}` : "—"} hint="current filter" />
           </dl>
           <SubscribeForm />
-          <PushAlerts />
         </section>
 
         {/* Filters */}
