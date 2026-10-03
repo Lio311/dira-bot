@@ -7,6 +7,8 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "diraBot",
     short_name: "diraBot",
     description: "4–5 room apartments for sale in Tel Aviv and around, gathered every 8 hours.",
+    id: "/",
+    scope: "/",
     start_url: "/",
     display: "standalone",
     background_color: "#f7f6f3",

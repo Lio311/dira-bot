@@ -11,6 +11,7 @@ import { CITIES } from "../src/lib/config";
 import { closeBrowser } from "./lib/browser";
 import { renderEmail, sendEmail } from "./lib/email";
 import { normalize, promoteLiveDuplicates, saveListings, type Normalized, type PriceChange } from "./lib/store";
+import { sendMobileAlerts } from "./lib/push";
 import { sendToSubscribers } from "./lib/subscribers";
 import { verifyRemoved } from "./lib/verify-removed";
 import { yad2 } from "./sources/yad2";
@@ -28,6 +29,7 @@ const flag = (name: string) => args.find((a) => a === `--${name}` || a.startsWit
 const only = flag("only")?.split("=")[1]?.split(",");
 const dry = !!flag("dry");
 const noEmail = !!flag("no-email");
+const noPush = !!flag("no-push");
 const noVerify = !!flag("no-verify");
 
 const log = (...m: unknown[]) => console.log(new Date().toISOString().slice(11, 19), ...m);
@@ -110,6 +112,8 @@ async function main() {
     log(`dry run: ${dryRows.length} listings written to dry-run.json`);
     return anySucceeded;
   }
+
+  if (!noPush) await sendMobileAlerts(db!, log);
 
   // Everything not yet emailed, excluding cross-site duplicates and ads already taken down.
   const fresh = await db!

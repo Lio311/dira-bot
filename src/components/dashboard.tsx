@@ -27,6 +27,7 @@ import { StarredFilter, useStarredListings } from "./favorites";
 import { ListingCard, ListingRow } from "./listing-card";
 import { Logo } from "./logo";
 import { SubscribeForm } from "./subscribe-form";
+import { PushAlerts } from "./push-alerts";
 
 // MapLibre touches window/WebGL at import time, so the map only loads in the browser.
 const ListingsMap = dynamic(() => import("./listings-map"), {
@@ -611,6 +612,7 @@ export function Dashboard({
             <Stat label="Median ₪/m²" value={stats.perSqm ? `₪${Math.round(stats.perSqm).toLocaleString("en-US")}` : "—"} hint="current filter" />
           </dl>
           <SubscribeForm />
+          <PushAlerts />
         </section>
 
         {/* Filters */}

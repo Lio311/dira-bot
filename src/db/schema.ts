@@ -125,3 +125,13 @@ export type NewListing = typeof listings.$inferInsert;
 export type ScrapeRun = typeof scrapeRuns.$inferSelect;
 export type TrackedCity = typeof trackedCities.$inferSelect;
 export type Subscriber = typeof subscribers.$inferSelect;
+
+/** Each browser installation opts in separately. Cursor is independent of email delivery. */
+export const pushSubscriptions = pgTable("push_subscriptions", {
+  id: serial("id").primaryKey(),
+  endpoint: text("endpoint").notNull().unique(),
+  p256dh: text("p256dh").notNull(),
+  auth: text("auth").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  lastDeliveredAt: timestamp("last_delivered_at", { withTimezone: true }).notNull().defaultNow(),
+});

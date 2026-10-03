@@ -9,7 +9,8 @@
     "lint": "eslint",
     "scrape": "tsx scraper/run.ts",
     "db:generate": "drizzle-kit generate",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "test:push": "node --import tsx --test tests/push.test.ts"
   },
   "dependencies": {
     "drizzle-orm": "^0.45.3",
@@ -20,7 +21,8 @@
     "postgres": "^3.4.9",
     "react": "19.2.8",
     "react-dom": "19.2.8",
-    "server-only": "^0.0.1"
+    "server-only": "^0.0.1",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
@@ -28,6 +30,7 @@
     "@types/nodemailer": "^8.0.2",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/web-push": "^3.6.4",
     "dotenv": "^18.0.5",
     "drizzle-kit": "^0.31.11",
     "eslint": "^9",

@@ -43,6 +43,13 @@
       "when": 1790830388148,
       "tag": "0005_pink_warbird",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791018155522,
+      "tag": "0006_wealthy_mathemanic",
+      "breakpoints": true
     }
   ]
 }
